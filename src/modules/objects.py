@@ -61,7 +61,7 @@ class BoundingBox3D:
         self.dimensions = self.get_dimensions(self.vertices)
         self.yaw = self.get_yaw(self.vertices)
         self.speed = speed
-    
+
     def get_vertices(self, center: np.ndarray) -> np.ndarray:
         """Get the vertices of the bounding box."""
         vertices = np.array(
@@ -80,10 +80,12 @@ class BoundingBox3D:
         x_dim = np.max(vertices[0]) - np.min(vertices[0])
         y_dim = np.max(vertices[1]) - np.min(vertices[1])
         z_dim = np.max(vertices[2]) - np.min(vertices[2])
-        w = min(x_dim, y_dim)
-        l = max(x_dim, y_dim)
+        # w = min(x_dim, y_dim)
+        # l = max(x_dim, y_dim)
+        l = x_dim
+        w = y_dim
         h = z_dim
-        return (w, l, h)
+        return (l, w, h) # x,y,z
 
     def get_yaw(self, vertices: np.ndarray) -> float:
         """Get the yaw of the bounding box."""

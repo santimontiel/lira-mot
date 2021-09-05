@@ -3,7 +3,8 @@
 
 import numpy as np
 import rospy
-import tf
+import math
+# import tf
 
 from ros_numpy.point_cloud2 import pointcloud2_to_array
 from typing import List
@@ -14,10 +15,63 @@ from sensor_msgs.msg            import PointCloud2, PointField
 from geometry_msgs.msg          import Point
 from visualization_msgs.msg     import Marker, MarkerArray
 from jsk_recognition_msgs.msg   import BoundingBox, BoundingBoxArray
+from pyquaternion               import Quaternion
 
 ##############################################################################
 ### CONVERSIONS FROM LiRa-MOT NODE (NUMPY ARRAY) TO ROS MESSAGES #############
 ##############################################################################
+
+_EPS = np.finfo(float).eps * 4.0
+
+###################################
+## From ROS source code (/opt/ros/melodic/lib/python2.7/dist-packages/tf/transformations.py)
+
+def quaternion_matrix(quaternion):
+    """Return homogeneous rotation matrix from quaternion.
+
+    >>> R = quaternion_matrix([0.06146124, 0, 0, 0.99810947])
+    >>> np.allclose(R, rotation_matrix(0.123, (1, 0, 0)))
+    True
+
+    """
+
+    q = np.array(quaternion[:4], dtype=np.float64, copy=True)
+    nq = np.dot(q, q)
+    if nq < _EPS:
+        return np.identity(4)
+    q *= math.sqrt(2.0 / nq)
+    q = np.outer(q, q)
+    return np.array((
+        (1.0-q[1, 1]-q[2, 2],     q[0, 1]-q[2, 3],     q[0, 2]+q[1, 3], 0.0),
+        (    q[0, 1]+q[2, 3], 1.0-q[0, 0]-q[2, 2],     q[1, 2]-q[0, 3], 0.0),
+        (    q[0, 2]-q[1, 3],     q[1, 2]+q[0, 3], 1.0-q[0, 0]-q[1, 1], 0.0),
+        (                0.0,                 0.0,                 0.0, 1.0)
+        ), dtype=np.float64)
+
+####################################
+
+def radar2laser_coordinates(tf_laser2radar,radar_bounding_box):  
+  """
+  """
+
+  radar_location = radar_bounding_box.center.tolist()
+  radar_location.append(1) # To homogeneous coordinates
+  radar_location = np.array(radar_location).reshape(-1,1)
+
+  laser_location = np.dot(tf_laser2radar,radar_location).reshape(-1) # == A @ B 
+
+  dim = radar_bounding_box.dimensions
+  laser_dim = [dim[0],dim[1],dim[2]]
+  laser_location = laser_location[:-1].tolist() + laser_dim + [radar_bounding_box.yaw]
+
+  print()
+
+  return laser_location
+
+def yaw2quaternion(yaw: float) -> Quaternion:
+    """
+    """
+    return Quaternion(axis=[0,0,1], radians=yaw)
 
 colors = [
     ColorRGBA(1.0, 0.0, 0.0, 1.0),          # Red
@@ -40,23 +94,57 @@ def bounding_boxes_to_ros_msg(bboxes: List[BoundingBox3D], cb_msg: object, names
         bbox_msg = BoundingBox()
         bbox_msg.header.stamp = cb_msg.header.stamp
         bbox_msg.header.frame_id = 'ego_vehicle/lidar/lidar1'
-        quat = tf.transformations.quaternion_from_euler(ai=0, aj=0, ak=0)
+        q = yaw2quaternion(bbox.yaw)
+
         bbox_msg.pose.position.x = bbox.center[0]
         bbox_msg.pose.position.y = bbox.center[1]
         bbox_msg.pose.position.z = bbox.center[2]
-        bbox_msg.pose.orientation.w = quat[0]
-        bbox_msg.pose.orientation.x = quat[1]
-        bbox_msg.pose.orientation.y = quat[2]
-        bbox_msg.pose.orientation.z = bbox.yaw
-        bbox_msg.dimensions.x = bbox.dimensions[0] / 5
-        bbox_msg.dimensions.y = bbox.dimensions[1] / 5
-        bbox_msg.dimensions.z = bbox.dimensions[2] / 5
+
+        bbox_msg.pose.orientation.x = q[1] 
+        bbox_msg.pose.orientation.y = q[2]
+        bbox_msg.pose.orientation.z = q[3]
+        bbox_msg.pose.orientation.w = q[0]
+
+        bbox_msg.dimensions.x = bbox.dimensions[0] / 10
+        bbox_msg.dimensions.y = bbox.dimensions[1] / 10
+        bbox_msg.dimensions.z = bbox.dimensions[2] / 10
         bbox_msg.value = 0.0
         bbox_msg.label = 0
         bbox_array.boxes.append(bbox_msg)
     return bbox_array
-        
 
+def radar_bounding_boxes_to_ros_msg(bboxes: List, cb_msg: object, namespace: str) -> BoundingBoxArray:
+    """Create a jsk_recognition_msgs.BoundingBoxArray from a list of
+    BoundingBox3D dataclass object.
+    """
+    bbox_array = MarkerArray()
+
+    for (idx, bbox) in enumerate(bboxes):
+        bbox_msg = Marker()
+        bbox_msg.header.stamp = cb_msg.header.stamp
+        bbox_msg.header.frame_id = 'ego_vehicle/lidar/lidar1'
+        bbox_msg.type = 1
+    
+        bbox_msg.pose.position.x = bbox[0]
+        bbox_msg.pose.position.y = bbox[1]
+        bbox_msg.pose.position.z = bbox[2]
+
+        q = yaw2quaternion(bbox[6])
+
+        bbox_msg.pose.orientation.x = q[1] 
+        bbox_msg.pose.orientation.y = q[2]
+        bbox_msg.pose.orientation.z = q[3]
+        bbox_msg.pose.orientation.w = q[0]
+
+        bbox_msg.scale.x = bbox[3] / 10
+        bbox_msg.scale.y = bbox[4] / 10
+        bbox_msg.scale.z = bbox[5] / 10
+
+        bbox_msg.color = colors[2]
+
+        bbox_array.markers.append(bbox_msg)
+    return bbox_array
+        
 def detections_to_marker_array_msg(clusters: list, cb_msg: object, namespace: str) -> MarkerArray:
     """Create a visualization_msgs.MarkerArray from a np.array list
     of detections.
@@ -73,7 +161,8 @@ def detections_to_marker_array_msg(clusters: list, cb_msg: object, namespace: st
         marker.scale.x = 0.5                                # Scale
         marker.scale.y = 0.5
         marker.scale.z = 0.5
-        marker.color = colors[idx%len(colors)]              # Color
+        # marker.color = colors[idx%len(colors)]              # Color
+        marker.color = colors[0]              # Color
         marker.points = [Point(point[0], point[1], point[2]) for point in cloud.points] # Points
         marker_array.markers.append(marker)                 # Add Marker to MarkerArray
 

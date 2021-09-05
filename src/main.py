@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.8
 # -*- coding: utf-8 -*-
 
 """ LiRa-MOT: Multi-Object Tracking System based on LiDAR and RADAR
@@ -14,14 +14,15 @@ from time import time
 import rospy
 import ros_numpy
 import message_filters
-from tf import TransformListener
+# from tf import TransformListener
 from sensor_msgs.msg            import PointCloud2, PointField
 from visualization_msgs.msg     import Marker, MarkerArray
 from jsk_recognition_msgs.msg   import BoundingBox, BoundingBoxArray
+from geometry_msgs.msg          import Point, Transform
 
 # -- Scikit-Learn imports
 from sklearn.cluster            import DBSCAN
-from hdbscan                    import HDBSCAN
+# from hdbscan                    import HDBSCAN
 
 # -- Open3D imports
 import open3d as o3d
@@ -60,10 +61,27 @@ class LiRa():
         # -- RADAR publishers
         self.pub_radar_detections       = rospy.Publisher("/t4ac/perception/radar_detections", PointCloud2, queue_size=10)
         self.pub_radar_visualization    = rospy.Publisher("/t4ac/perception/radar_visualization", MarkerArray, queue_size=10)
-        self.pub_radar_bounding_boxes   = rospy.Publisher("/t4ac/perception/radar_bounding_boxes", BoundingBoxArray, queue_size=10)
+        self.pub_radar_bounding_boxes   = rospy.Publisher("/t4ac/perception/radar_bounding_boxes", MarkerArray, queue_size=10)
 
         # -- Tf listener to transform radar coordinates to lidar coordinates
-        self.listener = TransformListener()
+
+        ########### TODO: Improve this directly listening the transform here (Python3 - ROS Noetic)
+
+        aux_tf = rospy.wait_for_message('t4ac/transform/laser2radar', Transform)
+        t = aux_tf.translation
+        trans = [t.x,t.y,t.z]
+        r = aux_tf.rotation
+        rot = [r.x,r.y,r.z,r.w]
+        rot_matrix = types_helper.quaternion_matrix(rot) # Quaternion to Numpy matrix
+            
+        self.tf_laser2radar = rot_matrix
+        self.tf_laser2radar[:3,3] = self.tf_laser2radar[:3,3] + trans
+
+        print("TF Laser to RADAR: ", self.tf_laser2radar)
+        
+        ###########
+
+        # self.listener = TransformListener()
 
     #################################################################
     ### SYNC SENSORS CALLBACK #######################################
@@ -76,7 +94,7 @@ class LiRa():
         #################################################################
         ### TRANSFORM LISTENER FOR SENSORS ##############################
         #################################################################
-        self.listener.waitForTransform('ego_vehicle/lidar/lidar1', 'ego_vehicle/radar/front', rospy.Time(), rospy.Duration.from_sec(10))
+        # self.listener.waitForTransform('ego_vehicle/lidar/lidar1', 'ego_vehicle/radar/front', rospy.Time(), rospy.Duration.from_sec(10))
 
         #################################################################
         ### LIDAR OBJECT DETECTION PIPELINE #############################
@@ -168,7 +186,7 @@ class LiRa():
         rt4 = time()
 
         # 4. Bounding boxes extraction
-        radar_bb_array = [BoundingBox3D(cluster.points, speed=cluster.speed) for cluster in lidar_merged_clusters]
+        radar_bb_array = [BoundingBox3D(cluster.points, speed=cluster.speed) for cluster in radar_clusters]
 
         for el in radar_clusters:
             print(el)
@@ -184,13 +202,24 @@ class LiRa():
 
         # b. Building markers from objects
         detection_markers = types_helper.detections_to_marker_array_msg(radar_clusters, radar_data, "radarspace")
-        radar_bb_array_msg = types_helper.bounding_boxes_to_ros_msg(radar_bb_array, radar_data, "radar_bb")
+        
+        # c. Convert to LiDAR coordinates
 
-        # c. publishing messages to ros topics
+        radar_lidar_frame_list = []
+
+        print("TF Laser to RADAR: ", self.tf_laser2radar)
+
+        for radar_bb in radar_bb_array:
+            radar_lidar_frame = types_helper.radar2laser_coordinates(self.tf_laser2radar,radar_bb)
+            radar_lidar_frame_list.append(radar_lidar_frame)
+        
+        radar_bb_array_msg = types_helper.radar_bounding_boxes_to_ros_msg(radar_lidar_frame_list, radar_data, "radar_bb")
+
+        # d. publishing messages to ros topics
         self.pub_radar_visualization.publish(detection_markers)
         self.pub_radar_bounding_boxes.publish(radar_bb_array_msg)
 
-        # d. Radar object detection pipeline ends
+        # e. Radar object detection pipeline ends
         rtf = time()
         print(f"Time consumed during RADAR callback: {rtf-rt1}")
         
