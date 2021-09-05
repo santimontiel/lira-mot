@@ -222,7 +222,12 @@ class LiRa():
         # e. Radar object detection pipeline ends
         rtf = time()
         print(f"Time consumed during RADAR callback: {rtf-rt1}")
-        
+
+        #################################################################
+        ### SENSOR FUSION PIPELINE #############################
+        #################################################################
+
+        # Add here 3D IoU algorithm
 
 def main() -> None:
     lira_mot_node = LiRa()
