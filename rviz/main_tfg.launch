@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+
+<launch>
+
+    <!-- Launch main script -->
+    <node name="lira_mot_node" pkg="clira_damot" type="main.py" output="screen"/>
+
+</launch>
