@@ -144,6 +144,49 @@ def radar_bounding_boxes_to_ros_msg(bboxes: List, cb_msg: object, namespace: str
 
         bbox_array.markers.append(bbox_msg)
     return bbox_array
+
+def marker_bbox_ros_msg(bboxes: List[float], color: str, cb_msg: object, namespace: str) -> MarkerArray:
+    """Create a visualization_msgs.MarkerArray from a list of
+    T4AC Bounding Boxes (list of 7 floats: center, dim, yaw) object.
+    """
+
+    colors = {
+        "red"       : ColorRGBA(1.0, 0.0, 0.0, 1.0),
+        "green"     : ColorRGBA(0.0, 1.0, 0.0, 1.0),
+        "blue"      : ColorRGBA(0.0, 0.0, 1.0, 1.0),
+        "cyan"      : ColorRGBA(0.0, 1.0, 1.0, 1.0),
+        "yellow"    : ColorRGBA(1.0, 1.0, 0.0, 1.0),
+        "magenta"   : ColorRGBA(1.0, 0.0, 1.0, 1.0),
+        "black"     : ColorRGBA(0.0, 0.0, 0.0, 1.0) 
+    }
+
+    bbox_array = MarkerArray()
+
+    for (idx, bbox) in enumerate(bboxes):
+        bbox_msg = Marker()
+        bbox_msg.header.stamp = cb_msg.header.stamp
+        bbox_msg.header.frame_id = 'ego_vehicle/lidar/lidar1'
+        bbox_msg.type = 1
+    
+        bbox_msg.pose.position.x = bbox[0]
+        bbox_msg.pose.position.y = bbox[1]
+        bbox_msg.pose.position.z = bbox[2]
+
+        q = yaw2quaternion(bbox[6])
+
+        bbox_msg.pose.orientation.x = q[1] 
+        bbox_msg.pose.orientation.y = q[2]
+        bbox_msg.pose.orientation.z = q[3]
+        bbox_msg.pose.orientation.w = q[0]
+
+        bbox_msg.scale.x = bbox[3] / 5
+        bbox_msg.scale.y = bbox[4] / 5
+        bbox_msg.scale.z = bbox[5] / 5
+
+        bbox_msg.color = colors[color]
+
+        bbox_array.markers.append(bbox_msg)
+    return bbox_array
         
 def detections_to_marker_array_msg(clusters: list, cb_msg: object, namespace: str) -> MarkerArray:
     """Create a visualization_msgs.MarkerArray from a np.array list

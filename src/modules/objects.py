@@ -89,5 +89,9 @@ class BoundingBox3D:
 
     def get_yaw(self, vertices: np.ndarray) -> float:
         """Get the yaw of the bounding box."""
-        yaw = np.arctan2(vertices[1, 0] - vertices[1, 1], vertices[0, 0] - vertices[0, 1])
+        yaw = np.arctan2(max(vertices[2]) - min(vertices[2]), max(vertices[0]) - min(vertices[0]))
         return yaw
+
+    def format_to_marker_bb_msg(self, center: np.ndarray, dimensions: Tuple[float, float, float], yaw: float) -> List[float]:
+        center_as_list = center.tolist()
+        return [center_as_list[0], center_as_list[1], center_as_list[2], dimensions[0], dimensions[1], dimensions[2], yaw]

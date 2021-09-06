@@ -14,7 +14,7 @@ from time import time
 import rospy
 import ros_numpy
 import message_filters
-# from tf import TransformListener
+from tf import TransformListener
 from sensor_msgs.msg            import PointCloud2, PointField
 from visualization_msgs.msg     import Marker, MarkerArray
 from jsk_recognition_msgs.msg   import BoundingBox, BoundingBoxArray
@@ -57,12 +57,13 @@ class LiRa():
         self.pub_lidar_detections       = rospy.Publisher("/t4ac/perception/lidar_detections", PointCloud2, queue_size=10)
         self.pub_lidar_visualization    = rospy.Publisher("/t4ac/perception/lidar_visualization", MarkerArray, queue_size=10)
         self.pub_lidar_bounding_boxes   = rospy.Publisher("/t4ac/perception/lidar_bounding_boxes", BoundingBoxArray, queue_size=10)
+        self.pub_lidar_marker_bb        = rospy.Publisher("/t4ac/perception/lidar_marker_bboxes", MarkerArray, queue_size=10)
 
         # -- RADAR publishers
         self.pub_radar_detections       = rospy.Publisher("/t4ac/perception/radar_detections", PointCloud2, queue_size=10)
         self.pub_radar_visualization    = rospy.Publisher("/t4ac/perception/radar_visualization", MarkerArray, queue_size=10)
         self.pub_radar_bounding_boxes   = rospy.Publisher("/t4ac/perception/radar_bounding_boxes", MarkerArray, queue_size=10)
-
+        
         # -- Tf listener to transform radar coordinates to lidar coordinates
 
         ########### TODO: Improve this directly listening the transform here (Python3 - ROS Noetic)
@@ -77,10 +78,10 @@ class LiRa():
         self.tf_laser2radar = rot_matrix
         self.tf_laser2radar[:3,3] = self.tf_laser2radar[:3,3] + trans
 
-        print("TF Laser to RADAR: ", self.tf_laser2radar)
+        print(">>> TF Laser to RADAR: ", self.tf_laser2radar)
         
         ###########
-
+        
         # self.listener = TransformListener()
 
     #################################################################
@@ -126,6 +127,10 @@ class LiRa():
         # 6. Building bounding boxes from clusters
         lidar_bb_array = [BoundingBox3D(cluster.points) for cluster in lidar_merged_clusters]
 
+        # 7. Building marker bounding boxes
+        lidar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in lidar_bb_array]
+        lidar_mbb_msg = types_helper.marker_bbox_ros_msg(lidar_mbb_array, "cyan", lidar_data, "lidar_ns")
+
         # 0. Auxiliary lidar code
         # a. Logging stats to user
         print(f"Lidar original points: {lidar_np_orig.shape}")
@@ -147,6 +152,7 @@ class LiRa():
         self.pub_lidar_plane_cloud.publish(lidar_ros_plane)
         self.pub_lidar_visualization.publish(lidar_marker_array_msg)
         self.pub_lidar_bounding_boxes.publish(lidar_bb_array_msg)
+        self.pub_lidar_marker_bb.publish(lidar_mbb_msg)
 
         # d. Lidar object detection pipeline ends
         lt2 = time()
@@ -204,7 +210,7 @@ class LiRa():
         detection_markers = types_helper.detections_to_marker_array_msg(radar_clusters, radar_data, "radarspace")
         
         # c. Convert to LiDAR coordinates
-
+        
         radar_lidar_frame_list = []
 
         print("TF Laser to RADAR: ", self.tf_laser2radar)
@@ -214,10 +220,14 @@ class LiRa():
             radar_lidar_frame_list.append(radar_lidar_frame)
         
         radar_bb_array_msg = types_helper.radar_bounding_boxes_to_ros_msg(radar_lidar_frame_list, radar_data, "radar_bb")
+        
+
+        radar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in radar_bb_array]
+        radar_mbb_msg = types_helper.marker_bbox_ros_msg(radar_mbb_array, "magenta", radar_data, "radar_ns")
 
         # d. publishing messages to ros topics
         self.pub_radar_visualization.publish(detection_markers)
-        self.pub_radar_bounding_boxes.publish(radar_bb_array_msg)
+        self.pub_radar_bounding_boxes.publish(radar_mbb_msg)
 
         # e. Radar object detection pipeline ends
         rtf = time()
