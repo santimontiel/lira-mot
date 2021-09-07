@@ -12,6 +12,6 @@
 			<param name="ego_vehicle" type="string"   value="ego_vehicle"/>
 			<param name="laser" type="string"   value="ego_vehicle/lidar/lidar1"/>
 			<param name="camera" type="string"   value="ego_vehicle/camera/rgb/front"/>
-			<param name="radar" type="string"   value="ego_vehicle/camera/radar/front"/>
+			<param name="radar" type="string"   value="ego_vehicle/radar/front"/>
 		</group>
 </launch>
