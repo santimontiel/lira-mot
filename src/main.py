@@ -262,10 +262,11 @@ class LiRa():
         #################################################################
 
     !!!!!!!!!!!!!!!!!!!!!!!
-        trackers = self.mot_tracker(METER AQUÍ LOS OBJETOS FUSIONADOS EN FORMADO T4AC BEV DETECTION)
+        merged_objects = sort_functions.bbox_to_xywh_cls_conf(merged_objects)
+        trackers = self.mot_tracker.update(METER AQUÍ LOS OBJETOS FUSIONADOS EN FORMADO T4AC BEV DETECTION)
     !!!!!!!!!!!!!!!!!!!!!!!
 
-        pasar a ROS
+        pasar a ROS para visualizar (Marker)
         aquí termina el TFG
 
 def main() -> None:
