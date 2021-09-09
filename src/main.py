@@ -83,10 +83,15 @@ class LiRa():
         self.tf_laser2radar[:3,3] = self.tf_laser2radar[:3,3] + trans
 
         # print(">>> TF Laser to RADAR: ", self.tf_laser2radar)
+        # TODO: Transform to Global Coordinates
         
         ###########
         
         # self.listener = TransformListener()
+
+        # Multi-Object Tracker
+
+        self.mot_tracker = sort_functions.Sort(max_age=1,min_hits=3)
 
     #################################################################
     ### SYNC SENSORS CALLBACK #######################################
@@ -251,6 +256,17 @@ class LiRa():
                 print("iou3d: ", iou3d)
 
         # self.self.pub_merged_marker_bb.publish(merged_obstacles_marker_array)
+
+        #################################################################
+        ### MULTI-OBJECT TRACKING PIPELINE #############################
+        #################################################################
+
+    !!!!!!!!!!!!!!!!!!!!!!!
+        trackers = self.mot_tracker(METER AQUÍ LOS OBJETOS FUSIONADOS EN FORMADO T4AC BEV DETECTION)
+    !!!!!!!!!!!!!!!!!!!!!!!
+
+        pasar a ROS
+        aquí termina el TFG
 
 def main() -> None:
     lira_mot_node = LiRa()

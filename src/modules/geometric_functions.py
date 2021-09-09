@@ -2,6 +2,9 @@
 
 import math
 import numpy 
+import cv2
+
+from shapely.geometry import Polygon
 
 # epsilon for testing whether a number is close to zero
 _EPS = numpy.finfo(float).eps * 4.0
@@ -124,4 +127,70 @@ def euclidean_distance(pose_a,pose_b):
     distance = math.sqrt(pow(xa-xb,2)+pow(ya-yb,2)+pow(za-zb,2))
 
     return distance
+
+def rotz(t):
+    """ 
+    Rotation about the z-axis
+    """
+    c = np.cos(t)
+    s = np.sin(t)
+    return np.array([[c,  -s,  0],
+                     [s,   c,  0],
+                     [0,   0,  1]])
+
+def compute_corners(bbox):
+    """
+    Compute the corners of the rectangle given its x,y centroid, width and length and
+    its rotation (clockwise if you see the screen, according to OpenCV)
+    """
+    
+    rotation = bbox[4]
+    
+    if rotation > math.pi:
+        rotation = rotation - math.pi
+    
+    R = rotz(rotation)
+
+    # 3D bounding box corners
+
+    x, y, w, l = bbox[0], bbox[1], bbox[2], bbox[3]
+
+    x_corners = [-l/2,-l/2,l/2,l/2]
+    y_corners = [w/2,-w/2,w/2,-w/2]
+    z_corners = [0,0,0,0]
+
+    corners_3d = np.vstack([x_corners,y_corners,z_corners])
+    corners_3d = np.dot(R, corners_3d)[0:2]
+    corners_3d = corners_3d + np.vstack([x,y])
+    
+    corners = []
+    for i in range(4):
+        c = int(round(corners_3d[0,i].item())), int(round(corners_3d[1,i].item()))
+        corners.append(c)
+    corners = tuple(corners)
+    return corners
+
+def iou(bb_1,bb_2): 
+  """
+  Computes IOU between two (possibly) rotated bounding boxes in the form [x,y,w,l,theta]
+  """
+
+  corners_1 = compute_corners(bb_1)
+  corners_2 = compute_corners(bb_2)
+
+  # To build the polygon -> Left-bottom corner, Right-bottom, Top-right corner, Top-left corner
+
+  b1 = Polygon([corners_1[2],corners_1[3],corners_1[1],corners_1[0]]) 
+  b2 = Polygon([corners_2[2],corners_2[3],corners_2[1],corners_2[0]])
+  
+  intersection = b1.intersection(b2).area
+  union = b1.union(b2).area
+
+  if union > 0.0:
+    o = intersection / union
+    return(o)
+  else:
+    return 0.0
+
+
 
