@@ -132,7 +132,7 @@ class LiRa():
         lidar_bb_array = [BoundingBox3D(cluster.points) for cluster in lidar_merged_clusters]
 
         # 7. Building marker bounding boxes
-        lidar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in lidar_bb_array]
+        lidar_mbb_array = [el.format_to_marker_bb_msg() for el in lidar_bb_array]
         lidar_mbb_msg = types_helper.marker_bbox_ros_msg(lidar_mbb_array, "cyan", lidar_data, "lidar_ns")
 
         # 0. Auxiliary lidar code
@@ -148,7 +148,7 @@ class LiRa():
         print("LiDAR bounding boxes: ", len(lidar_mbb_array))
 
         # b. Building markers from objects
-        lidar_marker_array_msg = types_helper.detections_to_marker_array_msg(lidar_merged_clusters, lidar_data, "lidar_vis")
+        lidar_marker_array_msg = types_helper.detections_to_marker_array_msg(lidar_merged_clusters, lidar_data, "lidar_vis", "blue")
         lidar_bb_array_msg = types_helper.bounding_boxes_to_ros_msg(lidar_bb_array, lidar_data, "lidar_bb")
         
         # c. publishing messages to ros topics
@@ -212,7 +212,7 @@ class LiRa():
         # print(f"Time consumed classifying clusters: {rt4-rt3}")
 
         # b. Building markers from objects
-        detection_markers = types_helper.detections_to_marker_array_msg(radar_clusters, radar_data, "radarspace")
+        detection_markers = types_helper.detections_to_marker_array_msg(radar_clusters, radar_data, "radarspace", "pink")
         
         # c. Convert to LiDAR coordinates
         """

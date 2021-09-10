@@ -63,9 +63,9 @@ class BoundingBox3D:
         self.points = points
         # self.center = np.mean(points, axis=0)
         center_array = np.array([[
-                    (max(self.points[:,0]) - min(self.points[:,0])) / 2,
-                    (max(self.points[:,1]) - min(self.points[:,1])) / 2,
-                    (max(self.points[:,2]) - min(self.points[:,2])) / 2
+                    (max(self.points[:,0]) + min(self.points[:,0])) / 2,
+                    (max(self.points[:,1]) + min(self.points[:,1])) / 2,
+                    (max(self.points[:,2]) + min(self.points[:,2])) / 2
                 ]])
         self.center = center_array[0][0], center_array[0][1], center_array[0][2]
         self.vertices = self.get_vertices(self.center)
@@ -109,5 +109,7 @@ class BoundingBox3D:
         yaw = np.arctan2(max(vertices[2]) - min(vertices[2]), max(vertices[0]) - min(vertices[0]))
         return 0
 
-    def format_to_marker_bb_msg(self, center: np.ndarray, dimensions: Tuple[float, float, float], yaw: float) -> List[float]:
-        return [center[0], center[1], center[2], dimensions[0], dimensions[1], dimensions[2], yaw]
+    def format_to_marker_bb_msg(self) -> List[float]:
+        return [self.center[0], self.center[1], self.center[2],
+            self.dimensions[0], self.dimensions[1], self.dimensions[2],
+            self.yaw, self.speed, self.sensor]
