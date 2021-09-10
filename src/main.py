@@ -14,7 +14,7 @@ from time import time
 import rospy
 import ros_numpy
 import message_filters
-# from tf import TransformListener
+from tf import TransformListener
 from sensor_msgs.msg            import PointCloud2, PointField
 from visualization_msgs.msg     import Marker, MarkerArray
 from jsk_recognition_msgs.msg   import BoundingBox, BoundingBoxArray
@@ -71,7 +71,7 @@ class LiRa():
         # -- Tf listener to transform radar coordinates to lidar coordinates
 
         ########### TODO: Improve this directly listening the transform here (Python3 - ROS Noetic)
-
+        """
         aux_tf = rospy.wait_for_message('t4ac/transform/laser2radar', Transform)
         t = aux_tf.translation
         trans = [t.x,t.y,t.z]
@@ -83,10 +83,10 @@ class LiRa():
         self.tf_laser2radar[:3,3] = self.tf_laser2radar[:3,3] + trans
 
         # print(">>> TF Laser to RADAR: ", self.tf_laser2radar)
-        
+        """
         ###########
         
-        # self.listener = TransformListener()
+        self.listener = TransformListener()
 
     #################################################################
     ### SYNC SENSORS CALLBACK #######################################
@@ -215,7 +215,7 @@ class LiRa():
         detection_markers = types_helper.detections_to_marker_array_msg(radar_clusters, radar_data, "radarspace")
         
         # c. Convert to LiDAR coordinates
-        
+        """
         radar_lidar_frame_list = []
 
         for radar_bb in radar_bb_array:
@@ -227,10 +227,10 @@ class LiRa():
         
         radar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in radar_bb_array]
         radar_mbb_msg = types_helper.marker_bbox_ros_msg(radar_mbb_array, "magenta", radar_data, "radar_ns")
-
+        """
         # d. publishing messages to ros topics
         self.pub_radar_visualization.publish(detection_markers)
-        self.pub_radar_bounding_boxes.publish(radar_mbb_msg)
+        # self.pub_radar_bounding_boxes.publish(radar_mbb_msg)
 
         # e. Radar object detection pipeline ends
         rtf = time()
@@ -239,7 +239,7 @@ class LiRa():
         #################################################################
         ### SENSOR FUSION PIPELINE #############################
         #################################################################
-
+        """
         for i,lidar_obstacle in enumerate(lidar_mbb_array):
             print(f"LiDAR obstacle {i}: {lidar_obstacle}")
             lidar_3d_corners = iou_3d_functions.compute_box_3d(lidar_obstacle)
@@ -249,7 +249,7 @@ class LiRa():
                 radar_3d_corners = iou_3d_functions.compute_box_3d(radar_obstacle)
                 iou3d, _ = iou_3d_functions.box3d_iou(lidar_3d_corners,radar_3d_corners)
                 print("iou3d: ", iou3d)
-
+        """
         # self.self.pub_merged_marker_bb.publish(merged_obstacles_marker_array)
 
 def main() -> None:

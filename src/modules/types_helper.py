@@ -179,9 +179,9 @@ def marker_bbox_ros_msg(bboxes: List[float], color: str, cb_msg: object, namespa
         bbox_msg.pose.orientation.z = q[3]
         bbox_msg.pose.orientation.w = q[0]
 
-        bbox_msg.scale.x = bbox[3] / 5
-        bbox_msg.scale.y = bbox[4] / 5
-        bbox_msg.scale.z = bbox[5] / 5
+        bbox_msg.scale.x = bbox[3]
+        bbox_msg.scale.y = bbox[4]
+        bbox_msg.scale.z = bbox[5]
 
         bbox_msg.color = colors[color]
 
