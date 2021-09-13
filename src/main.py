@@ -14,7 +14,7 @@ from time import time
 import rospy
 import ros_numpy
 import message_filters
-# from tf import TransformListener
+from tf import TransformListener
 from sensor_msgs.msg            import PointCloud2, PointField
 from visualization_msgs.msg     import Marker, MarkerArray
 from jsk_recognition_msgs.msg   import BoundingBox, BoundingBoxArray
@@ -71,7 +71,7 @@ class LiRa():
         # -- Tf listener to transform radar coordinates to lidar coordinates
 
         ########### TODO: Improve this directly listening the transform here (Python3 - ROS Noetic)
-
+        """
         aux_tf = rospy.wait_for_message('t4ac/transform/laser2radar', Transform)
         t = aux_tf.translation
         trans = [t.x,t.y,t.z]
@@ -83,10 +83,10 @@ class LiRa():
         self.tf_laser2radar[:3,3] = self.tf_laser2radar[:3,3] + trans
 
         # print(">>> TF Laser to RADAR: ", self.tf_laser2radar)
-        
+        """
         ###########
         
-        # self.listener = TransformListener()
+        self.listener = TransformListener()
 
         # Multi-Object Tracker
 
@@ -136,7 +136,7 @@ class LiRa():
         lidar_bb_array = [BoundingBox3D(cluster.points) for cluster in lidar_merged_clusters]
 
         # 7. Building marker bounding boxes
-        lidar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in lidar_bb_array]
+        lidar_mbb_array = [el.format_to_marker_bb_msg() for el in lidar_bb_array]
         lidar_mbb_msg = types_helper.marker_bbox_ros_msg(lidar_mbb_array, "cyan", lidar_data, "lidar_ns")
 
         # 0. Auxiliary lidar code
@@ -152,7 +152,7 @@ class LiRa():
         print("LiDAR bounding boxes: ", len(lidar_mbb_array))
 
         # b. Building markers from objects
-        lidar_marker_array_msg = types_helper.detections_to_marker_array_msg(lidar_merged_clusters, lidar_data, "lidar_vis")
+        lidar_marker_array_msg = types_helper.detections_to_marker_array_msg(lidar_merged_clusters, lidar_data, "lidar_vis", "blue")
         lidar_bb_array_msg = types_helper.bounding_boxes_to_ros_msg(lidar_bb_array, lidar_data, "lidar_bb")
         
         # c. publishing messages to ros topics
@@ -216,10 +216,10 @@ class LiRa():
         # print(f"Time consumed classifying clusters: {rt4-rt3}")
 
         # b. Building markers from objects
-        detection_markers = types_helper.detections_to_marker_array_msg(radar_clusters, radar_data, "radarspace")
+        detection_markers = types_helper.detections_to_marker_array_msg(radar_clusters, radar_data, "radarspace", "pink")
         
         # c. Convert to LiDAR coordinates
-        
+        """
         radar_lidar_frame_list = []
 
         for radar_bb in radar_bb_array:
@@ -231,10 +231,10 @@ class LiRa():
         
         radar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in radar_bb_array]
         radar_mbb_msg = types_helper.marker_bbox_ros_msg(radar_mbb_array, "magenta", radar_data, "radar_ns")
-
+        """
         # d. publishing messages to ros topics
         self.pub_radar_visualization.publish(detection_markers)
-        self.pub_radar_bounding_boxes.publish(radar_mbb_msg)
+        # self.pub_radar_bounding_boxes.publish(radar_mbb_msg)
 
         # e. Radar object detection pipeline ends
         rtf = time()
@@ -243,7 +243,7 @@ class LiRa():
         #################################################################
         ### SENSOR FUSION PIPELINE #############################
         #################################################################
-
+        
         for i,lidar_obstacle in enumerate(lidar_mbb_array):
             print(f"LiDAR obstacle {i}: {lidar_obstacle}")
             lidar_3d_corners = iou_3d_functions.compute_box_3d(lidar_obstacle)
@@ -254,7 +254,7 @@ class LiRa():
                 iou3d, _ = iou_3d_functions.box3d_iou(lidar_3d_corners,radar_3d_corners)
                 print("iou3d: ", iou3d)
 
-
+        """
         xyz, lwh, yaw, vel
 
         # TODO: Transform to Global Coordinates
@@ -269,6 +269,7 @@ class LiRa():
         print("Merged objects: ", merged_objects)
         print("Types: ", types)
         # trackers = self.mot_tracker.update(METER AQUÍ LOS OBJETOS FUSIONADOS EN FORMATO T4AC BEV DETECTION)
+        """
 
 def main() -> None:
     lira_mot_node = LiRa()

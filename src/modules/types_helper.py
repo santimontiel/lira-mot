@@ -147,7 +147,8 @@ def radar_bounding_boxes_to_ros_msg(bboxes: List, cb_msg: object, namespace: str
 
 def marker_bbox_ros_msg(bboxes: List[float], color: str, cb_msg: object, namespace: str) -> MarkerArray:
     """Create a visualization_msgs.MarkerArray from a list of
-    T4AC Bounding Boxes (list of 7 floats: center, dim, yaw) object.
+    T4AC Bounding Boxes (list of 9 param: center, dim, yaw, speed,
+    sensor) object.
     """
 
     colors = {
@@ -157,6 +158,7 @@ def marker_bbox_ros_msg(bboxes: List[float], color: str, cb_msg: object, namespa
         "cyan"      : ColorRGBA(0.0, 1.0, 1.0, 1.0),
         "yellow"    : ColorRGBA(1.0, 1.0, 0.0, 1.0),
         "magenta"   : ColorRGBA(1.0, 0.0, 1.0, 1.0),
+        "pink"      : ColorRGBA(1.0, 0.75, 0.79, 1),
         "black"     : ColorRGBA(0.0, 0.0, 0.0, 1.0) 
     }
 
@@ -179,19 +181,31 @@ def marker_bbox_ros_msg(bboxes: List[float], color: str, cb_msg: object, namespa
         bbox_msg.pose.orientation.z = q[3]
         bbox_msg.pose.orientation.w = q[0]
 
-        bbox_msg.scale.x = bbox[3] / 5
-        bbox_msg.scale.y = bbox[4] / 5
-        bbox_msg.scale.z = bbox[5] / 5
+        bbox_msg.scale.x = bbox[3]
+        bbox_msg.scale.y = bbox[4]
+        bbox_msg.scale.z = bbox[5]
 
         bbox_msg.color = colors[color]
 
         bbox_array.markers.append(bbox_msg)
     return bbox_array
         
-def detections_to_marker_array_msg(clusters: list, cb_msg: object, namespace: str) -> MarkerArray:
+def detections_to_marker_array_msg(clusters: list, cb_msg: object, namespace: str, color: str) -> MarkerArray:
     """Create a visualization_msgs.MarkerArray from a np.array list
     of detections.
     """
+
+    colors = {
+        "red"       : ColorRGBA(1.0, 0.0, 0.0, 1.0),
+        "green"     : ColorRGBA(0.0, 1.0, 0.0, 1.0),
+        "blue"      : ColorRGBA(0.0, 0.0, 1.0, 1.0),
+        "cyan"      : ColorRGBA(0.0, 1.0, 1.0, 1.0),
+        "yellow"    : ColorRGBA(1.0, 1.0, 0.0, 1.0),
+        "magenta"   : ColorRGBA(1.0, 0.0, 1.0, 1.0),
+        "pink"      : ColorRGBA(1.0, 0.75, 0.79, 1),
+        "black"     : ColorRGBA(0.0, 0.0, 0.0, 1.0) 
+    }
+
     marker_array = MarkerArray()
     for (idx, cloud) in enumerate(clusters):
         marker = Marker()                                   # Creation of a single Marker
@@ -205,7 +219,7 @@ def detections_to_marker_array_msg(clusters: list, cb_msg: object, namespace: st
         marker.scale.y = 0.5
         marker.scale.z = 0.5
         # marker.color = colors[idx%len(colors)]              # Color
-        marker.color = colors[0]              # Color
+        marker.color = colors[color]              # Color
         marker.points = [Point(point[0], point[1], point[2]) for point in cloud.points] # Points
         marker_array.markers.append(marker)                 # Add Marker to MarkerArray
 
