@@ -28,30 +28,37 @@ import tracking_functions
 
 def convert_bbox_to_z(bbox):
   """
-  Takes a bounding box in the form [x1,y1,x2,y2] and returns z in the form
-    [x,y,s,r] where x,y is the centre of the box and s is the scale/area and r is
-    the aspect ratio
+  Takes a bounding box in the form [x,y,w,l,theta,score] and returns z in the form
+  [x,y,s,r,theta] where x,y is the centre of the box, s is the scale/area, r is
+  the aspect ratio and theta is the bounding box angle
   """
-  w = bbox[2] - bbox[0]
-  h = bbox[3] - bbox[1]
-  x = bbox[0] + w/2.
-  y = bbox[1] + h/2.
-  s = w * h    #scale is just area
-  r = w / float(h)
-  return np.array([x, y, s, r]).reshape((4, 1))
 
+  x = bbox[0]
+  y = bbox[1]
+  w = bbox[2]
+  h = bbox[3]
+  
+  s = w*h         # Area of the rectangle
+  r = w/float(h)  # Aspect ratio of the rectangle
+  theta = bbox[4]
+
+  return np.array([x,y,s,r,theta]).reshape((5,1))
 
 def convert_x_to_bbox(x,score=None):
-  """
-  Takes a bounding box in the centre form [x,y,s,r] and returns it in the form
-    [x1,y1,x2,y2] where x1,y1 is the top left and x2,y2 is the bottom right
-  """
-  w = np.sqrt(x[2] * x[3])
-  h = x[2] / w
-  if(score==None):
-    return np.array([x[0]-w/2.,x[1]-h/2.,x[0]+w/2.,x[1]+h/2.]).reshape((1,4))
-  else:
-    return np.array([x[0]-w/2.,x[1]-h/2.,x[0]+w/2.,x[1]+h/2.,score]).reshape((1,5))
+    """
+    Takes a bounding box in the centre form [x,y,s,r,theta] and returns it in the form
+    [x,y,w,l,theta] where x, y are the centroid, w and l the bounding box dimensions (in pixels)
+    and theta is the bounding box angle
+    """
+
+    w = np.sqrt(x[2]*x[3])
+    h = x[2]/w
+    theta = x[4]
+
+    if not score:
+        return np.array([x[0],x[1],w,h,theta]).reshape((1,5))
+    else:
+        return np.array([x[0],x[1],w,h,theta,score]).reshape((1,6))
 
 class Sort(object):
   def __init__(self, max_age=1, min_hits=3, iou_threshold=0.001):
@@ -67,7 +74,11 @@ class Sort(object):
   def update(self, dets=np.empty((0, 5))):
     """
     Params:
-      dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
+      dets - a numpy array of detections (x,y,w,l,theta,score), where x,y are the centroid coordinates (BEV plane), w and l the
+      width and length of the obstacle (BEV plane), theta (rotation angle) and the detection score
+
+      types - a numpy array with the corresponding type of the detections
+
     Requires: this method must be called once for each frame even with empty detections (use np.empty((0, 5)) for frames without detections).
     Returns the a similar array, where the last column is the object ID.
     NOTE: The number of objects returned may differ from the number of detections provided.
@@ -108,75 +119,35 @@ class Sort(object):
       return np.concatenate(ret)
     return np.empty((0,5))
 
-# TODO: Pasar de BEV detection a x1y1x2y2score
+def merged_bboxes_to_xywlthetascore_types(merged_bboxes):
+  """
+  merged_bboxes = [[x,y,z,l,w,h,theta,vel,type]]
+  """
 
-def bbox_to_xywh_cls_conf(self,detections_rosmsg,img):
-    """
-    """
+  bboxes = []
+  types = []
+  k = 0
 
-    bboxes = []
-    types = []
-    k = 0
+  # Evaluate detections
 
-    # Evaluate detections
+  for merged_bbox in merged_bboxes:
+    # Evaluate score ?
+    l = merged_bbox[3]
+    w = merged_bbox[4]
 
-    for bbox_object in detections_rosmsg.bev_detections_list:
-        if (bbox_object.score >= self.detection_threshold):
+    if k == 0:
+      bboxes = np.array([[merged_bbox[0],merged_bbox[1],
+                          l,w,theta,vel]])
+      types = np.array([merged_bbox[8]])
+    else:
+      bbox = np.array([[merged_bbox[0],merged_bbox[1],
+                          l,w,theta,vel]])
+      type_object = np.array([merged_bbox[8]])
+      bboxes = np.concatenate([bboxes,bbox])
+      types = np.concatenate([types,type_object])
+    k += 1
 
-            bbox_object.x_corners = np.array(bbox_object.x_corners) # Tuple to np.ndarray
-            bbox_object.y_corners = np.array(bbox_object.y_corners) 
+  return bboxes,types
 
-            # Gaussian noise (If working with the groundtruth)
 
-            if self.use_gaussian_noise:
-                mu = 0
-                sigma = 0.05 
-                
-                x_offset, y_offset = np.random.normal(mu,sigma), np.random.normal(mu,sigma)
 
-                bbox_object.x_corners += x_offset
-                bbox_object.y_corners += y_offset
-                
-                bbox_object.x += x_offset
-                bbox_object.y += y_offset
-
-                theta = bbox_object.o # self.ego_orientation_cumulative_diff # Orientation angle (KITTI)
-                # + math.pi/2 if using AB4COGT2SORT
-                # + self.ego_orientation_cumulative_diff if using PointPillars
-                beta = np.arctan2(bbox_object.x-self.ego_vehicle_x,self.ego_vehicle_y-bbox_object.y) # Observation angle (KITTI)
-
-            # Calculate bounding box dimensions
-
-            w = math.sqrt(pow(bbox_object.x_corners[3]-bbox_object.x_corners[1],2)+pow(bbox_object.y_corners[3]-bbox_object.y_corners[1],2))
-            l = math.sqrt(pow(bbox_object.x_corners[0]-bbox_object.x_corners[1],2)+pow(bbox_object.y_corners[0]-bbox_object.y_corners[1],2))
-
-            # Translate local to global coordinates
-
-            aux_array = np.zeros((1,9))
-            aux_array[0,4] = bbox_object.o
-            aux_array[0,7:] = bbox_object.x, bbox_object.y
-
-            current_pos = store_global_coordinates(self.tf_map2lidar,aux_array)
-
-            if k == 0:
-                bboxes = np.array([[current_pos[0,0],current_pos[1,0], 
-                                    w, l,
-                                    theta, beta,
-                                    bbox_object.score,
-                                    bbox_object.x,bbox_object.y]])
-                
-                types = np.array([bbox_object.type])
-            else:
-                bbox = np.array([[current_pos[0,0],current_pos[1,0], 
-                                w, l,
-                                theta, beta,
-                                bbox_object.score,
-                                bbox_object.x,bbox_object.y]])
-
-                type_object = np.array([bbox_object.type])
-                bboxes = np.concatenate([bboxes,bbox])
-                types = np.concatenate([types,type_object])
-            k += 1  
-        bboxes = np.array(bboxes)
-
-    return bboxes, types

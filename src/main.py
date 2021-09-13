@@ -83,7 +83,6 @@ class LiRa():
         self.tf_laser2radar[:3,3] = self.tf_laser2radar[:3,3] + trans
 
         # print(">>> TF Laser to RADAR: ", self.tf_laser2radar)
-        # TODO: Transform to Global Coordinates
         
         ###########
         
@@ -255,19 +254,21 @@ class LiRa():
                 iou3d, _ = iou_3d_functions.box3d_iou(lidar_3d_corners,radar_3d_corners)
                 print("iou3d: ", iou3d)
 
-        # self.self.pub_merged_marker_bb.publish(merged_obstacles_marker_array)
+
+        xyz, lwh, yaw, vel
+
+        # TODO: Transform to Global Coordinates
+
+        # self.pub_merged_marker_bb.publish(merged_obstacles_marker_array)
 
         #################################################################
         ### MULTI-OBJECT TRACKING PIPELINE #############################
         #################################################################
 
-    !!!!!!!!!!!!!!!!!!!!!!!
-        merged_objects = sort_functions.bbox_to_xywh_cls_conf(merged_objects)
-        trackers = self.mot_tracker.update(METER AQUÍ LOS OBJETOS FUSIONADOS EN FORMADO T4AC BEV DETECTION)
-    !!!!!!!!!!!!!!!!!!!!!!!
-
-        pasar a ROS para visualizar (Marker)
-        aquí termina el TFG
+        merged_objects, types = sort_functions.merged_bboxes_to_xywlthetascore_types(merged_objects)
+        print("Merged objects: ", merged_objects)
+        print("Types: ", types)
+        # trackers = self.mot_tracker.update(METER AQUÍ LOS OBJETOS FUSIONADOS EN FORMATO T4AC BEV DETECTION)
 
 def main() -> None:
     lira_mot_node = LiRa()
