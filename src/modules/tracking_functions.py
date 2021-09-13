@@ -23,21 +23,25 @@ import numpy as np
 import math
 import time
 
-import smartmot_geometric_functions
-import monitors_functions
-import sort_functions
+from . import geometric_functions
+from . import sort_functions
 from filterpy.kalman import KalmanFilter # Bayesian filters imports
 from sklearn.preprocessing import PolynomialFeatures
 
-def linear_assignment(cost_matrix): # Hungarian Algorithm
+# from scipy.optimize import linear_sum_assignment as linear_assignment # Hungarian Algorithm
+
+def linear_assignment(cost_matrix):
   try:
     import lap
+    print("Cost matrix: ", cost_matrix)
     _, x, y = lap.lapjv(cost_matrix, extend_cost=True)
-    return np.array([[y[i],i] for i in x if i >= 0]) #
+    matched_indices = np.array([[y[i], i] for i in x if i >= 0])
+    return matched_indices
   except ImportError:
     from scipy.optimize import linear_sum_assignment
     x, y = linear_sum_assignment(cost_matrix)
-    return np.array(list(zip(x, y)))
+    matched_indices = np.array(list(zip(x, y)))
+    return matched_indices
 
 # Kalman
 
@@ -47,7 +51,7 @@ class KalmanBoxTracker(object):
   We assume constant velocity model
   """
   count = 0
-  def __init__(self,bbox,timer_rosmsg):
+  def __init__(self,bbox):
     """
     Initialises a tracker using initial bounding box.
     """
@@ -101,10 +105,6 @@ class KalmanBoxTracker(object):
     self.hits = 0
     self.hit_streak = 0
     self.age = 0
-    
-    self.start = timer_rosmsg
-    self.hits_time = float(0)
-    self.average_diff = float(0) # Average sample time
 
   def update(self,bbox):
     """
@@ -114,8 +114,6 @@ class KalmanBoxTracker(object):
     self.history = []
     self.hits += 1
     self.hit_streak += 1
-    
-    self.hits_time += 1
 
     self.kf.update(sort_functions.convert_bbox_to_z(bbox)) 
 
@@ -149,7 +147,8 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.001):
 
   Returns 3 lists of matches, unmatched_detections and unmatched_trackers
   """
-
+  print("Detections: ", detections)
+  print("Trackers: ", trackers)
   if(len(trackers)==0):
     return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,6),dtype=int)
   iou_matrix = np.zeros((len(detections),len(trackers)),dtype=np.float32)
@@ -159,7 +158,9 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.001):
   for d,det in enumerate(detections):
     for t,trk in enumerate(trackers):
       iou_matrix[d,t] = geometric_functions.iou(det,trk)
+  print("iou matrix: ", iou_matrix)
   matched_indices = linear_assignment(-iou_matrix) # Hungarian Algorithm
+  print("Matched indices: ", matched_indices)
 
   # Unmatched detections
   

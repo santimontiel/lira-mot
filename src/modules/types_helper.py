@@ -17,6 +17,8 @@ from visualization_msgs.msg     import Marker, MarkerArray
 from jsk_recognition_msgs.msg   import BoundingBox, BoundingBoxArray
 from pyquaternion               import Quaternion
 
+from . import geometric_functions
+
 ##############################################################################
 ### CONVERSIONS FROM LiRa-MOT NODE (NUMPY ARRAY) TO ROS MESSAGES #############
 ##############################################################################
@@ -54,17 +56,15 @@ def radar2laser_coordinates(tf_laser2radar,radar_bounding_box):
   """
   """
 
-  radar_location = radar_bounding_box.center.tolist()
+  radar_location = list(radar_bounding_box.center)
   radar_location.append(1) # To homogeneous coordinates
   radar_location = np.array(radar_location).reshape(-1,1)
-
+  
   laser_location = np.dot(tf_laser2radar,radar_location).reshape(-1) # == A @ B 
 
   dim = radar_bounding_box.dimensions
   laser_dim = [dim[0],dim[1],dim[2]]
   laser_location = laser_location[:-1].tolist() + laser_dim + [radar_bounding_box.yaw]
-
-  print()
 
   return laser_location
 
@@ -188,7 +188,45 @@ def marker_bbox_ros_msg(bboxes: List[float], color: str, cb_msg: object, namespa
         bbox_msg.color = colors[color]
 
         bbox_array.markers.append(bbox_msg)
+
     return bbox_array
+
+def tracker_to_marker(tracker,color,stamp):
+    """
+    Fill the obstacle features using real world metrics. Tracker presents a predicted state vector 
+    (x,y,l,w,theta, ID)
+    """
+    tracked_obstacle = Marker()
+
+    tracked_obstacle.header.frame_id = 'ego_vehicle/lidar/lidar1'
+    tracked_obstacle.header.stamp = stamp
+    tracked_obstacle.ns = "tracked_obstacles"
+    tracked_obstacle.action = tracked_obstacle.ADD
+        
+    tracked_obstacle.id = tracker[5].astype(int)
+
+    tracked_obstacle.pose.position.x = tracker[0] 
+    tracked_obstacle.pose.position.y = tracker[1]
+    tracked_obstacle.pose.position.z = -0.75 # TODO: Improve this
+    
+    tracked_obstacle.scale.x = tracker[2]
+    tracked_obstacle.scale.y = tracker[3]
+    tracked_obstacle.scale.z = 1.5 # TODO: Improve this
+    
+    quaternion = geometric_functions.quaternion_from_euler(0,0,-tracker[4])
+    
+    tracked_obstacle.pose.orientation.x = quaternion[0]
+    tracked_obstacle.pose.orientation.y = quaternion[1]
+    tracked_obstacle.pose.orientation.z = quaternion[2]
+    tracked_obstacle.pose.orientation.w = quaternion[3]
+        
+    tracked_obstacle.color.r = color[2]
+    tracked_obstacle.color.g = color[1]
+    tracked_obstacle.color.b = color[0]
+
+    tracked_obstacle.lifetime = rospy.Duration(1.0) # 1 second
+
+    return tracked_obstacle
         
 def detections_to_marker_array_msg(clusters: list, cb_msg: object, namespace: str, color: str) -> MarkerArray:
     """Create a visualization_msgs.MarkerArray from a np.array list

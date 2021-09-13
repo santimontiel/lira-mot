@@ -24,7 +24,7 @@ import rospy
 import geometry_msgs.msg
 import visualization_msgs.msg
 
-import tracking_functions
+from . import tracking_functions
 
 def convert_bbox_to_z(bbox):
   """
@@ -71,11 +71,11 @@ class Sort(object):
     self.trackers = []
     self.frame_count = 0
 
-  def update(self, dets=np.empty((0, 5))):
+  def update(self, dets, types):
     """
     Params:
-      dets - a numpy array of detections (x,y,w,l,theta,score), where x,y are the centroid coordinates (BEV plane), w and l the
-      width and length of the obstacle (BEV plane), theta (rotation angle) and the detection score
+      dets - a numpy array of detections (x,y,l,w,theta,vel), where x,y are the centroid coordinates (BEV plane), w and l the
+      width and length of the obstacle (BEV plane), theta (rotation angle) and the velocity of the bounding box
 
       types - a numpy array with the corresponding type of the detections
 
@@ -83,11 +83,16 @@ class Sort(object):
     Returns the a similar array, where the last column is the object ID.
     NOTE: The number of objects returned may differ from the number of detections provided.
     """
+    print("dets: ", dets, type(dets))
+    print("types: ", types, type(types))
     self.frame_count += 1
-    # get predicted locations from existing trackers.
+
+    # 1. Get predicted locations from existing trackers
+
+    print("Total trackers: ", len(self.trackers)) # Both preliminar and definitive trackers
     trks = np.zeros((len(self.trackers), 5))
     to_del = []
-    ret = []
+    ret, ret_type = [], []
     for t, trk in enumerate(trks):
       pos = self.trackers[t].predict()[0]
       trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
@@ -96,28 +101,51 @@ class Sort(object):
     trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
     for t in reversed(to_del):
       self.trackers.pop(t)
-    matched, unmatched_dets, unmatched_trks = tracking_functions.associate_detections_to_trackers(dets,trks, self.iou_threshold)
+    matched, unmatched_dets, unmatched_trks = tracking_functions.associate_detections_to_trackers(dets, trks, self.iou_threshold)
 
-    # update matched trackers with assigned detections
-    for m in matched:
-      self.trackers[m[1]].update(dets[m[0], :])
+    # 2. Update matched trackers with assigned detections
 
-    # create and initialise new trackers for unmatched detections
+    # for m in matched:
+    #   self.trackers[m[1]].update(dets[m[0], :])
+    for t,trk in enumerate(self.trackers):
+      if (t not in unmatched_trks):
+        d = matched[np.where(matched[:,1]==t)[0],0][0]
+        ret_type.append(types[d])                                                      
+        trk.update(dets[d,:]) # Update the space state
+
+    # 3. Create and initialise preliminar trackers for unmatched detections
+
     for i in unmatched_dets:
-        trk = tracking_functions.KalmanBoxTracker(dets[i,:])
-        self.trackers.append(trk)
+        if dets[i,0] != 0 and dets[i,1] != 0:
+          trk = tracking_functions.KalmanBoxTracker(dets[i,:])
+          print("det: ", dets[i,:])
+          print("trk: ", trk.kf.x)
+          print("\033[1;33m"+"Created preliminar tracker"+'\033[0;m')
+          self.trackers.append(trk)
     i = len(self.trackers)
-    for trk in reversed(self.trackers):
-        d = trk.get_state()[0]
-        if (trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits):
-          ret.append(np.concatenate((d,[trk.id+1])).reshape(1,-1)) # +1 as MOT benchmark requires positive
-        i -= 1
-        # remove dead tracklet
-        if(trk.time_since_update > self.max_age):
-          self.trackers.pop(i)
-    if(len(ret)>0):
-      return np.concatenate(ret)
-    return np.empty((0,5))
+    
+    # 4. Store relevant trackers in lists
+
+    for t,trk in enumerate(self.trackers):
+      if(t not in unmatched_trks):  
+          d = trk.get_state()[0] # Predicted state in next frame
+      if((trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits)):
+          # id+1 as MOT benchmark requires positive 
+          ret.append(np.concatenate((d,[trk.id+1])).reshape(1,-1)) 
+      i -= 1
+      # Remove dead tracklet
+      if(trk.time_since_update > self.max_age):
+        print("\033[1;36m"+"Deleted preliminar tracker"+'\033[0;m')
+        self.trackers.pop(i)
+
+    # 5. Return final trackers
+
+    print("Number of trackers: ", len(ret))
+    if(len(ret)>0 and self.frame_count > 1):
+      ret = np.concatenate(ret)
+      ret_type = np.array(ret_type)
+      return ret, ret_type
+    return [], [] 
 
 def merged_bboxes_to_xywlthetascore_types(merged_bboxes):
   """
@@ -130,22 +158,32 @@ def merged_bboxes_to_xywlthetascore_types(merged_bboxes):
 
   # Evaluate detections
 
-  for merged_bbox in merged_bboxes:
-    # Evaluate score ?
-    l = merged_bbox[3]
-    w = merged_bbox[4]
+  if len(merged_bboxes) > 0:
+    for merged_bbox in merged_bboxes:
+      # Evaluate score ?
+      x = merged_bbox[0]
+      y = merged_bbox[1]
+      l = merged_bbox[3]
+      w = merged_bbox[4]
+      theta = merged_bbox[6]
+      vel = merged_bbox[7]
 
-    if k == 0:
-      bboxes = np.array([[merged_bbox[0],merged_bbox[1],
+      if k == 0:
+        bboxes = np.array([[x,y,
+                            l,w,theta,vel]])
+        types = np.array([merged_bbox[8]])
+      else:
+        bbox = np.array([[x,y,
                           l,w,theta,vel]])
-      types = np.array([merged_bbox[8]])
-    else:
-      bbox = np.array([[merged_bbox[0],merged_bbox[1],
-                          l,w,theta,vel]])
-      type_object = np.array([merged_bbox[8]])
-      bboxes = np.concatenate([bboxes,bbox])
-      types = np.concatenate([types,type_object])
-    k += 1
+        type_object = np.array([merged_bbox[8]])
+        bboxes = np.concatenate([bboxes,bbox])
+        types = np.concatenate([types,type_object])
+      k += 1
+    bboxes = np.array(bboxes)
+    types = np.array(types)
+  else:
+    bboxes = np.array([[0,0,0,0,0,0]])
+    types = np.array(["no_objects"])
 
   return bboxes,types
 

@@ -113,6 +113,62 @@ def euler_from_quaternion(quaternion, axes='sxyz'):
     """
     return euler_from_matrix(quaternion_matrix(quaternion), axes)
 
+def quaternion_from_euler(ai, aj, ak, axes='sxyz'):
+    """Return quaternion from Euler angles and axis sequence.
+
+    ai, aj, ak : Euler's roll, pitch and yaw angles
+    axes : One of 24 axis sequences as string or encoded tuple
+
+    >>> q = quaternion_from_euler(1, 2, 3, 'ryxz')
+    >>> numpy.allclose(q, [0.310622, -0.718287, 0.444435, 0.435953])
+    True
+
+    """
+    try:
+        firstaxis, parity, repetition, frame = _AXES2TUPLE[axes.lower()]
+    except (AttributeError, KeyError):
+        _ = _TUPLE2AXES[axes]
+        firstaxis, parity, repetition, frame = axes
+
+    i = firstaxis
+    j = _NEXT_AXIS[i+parity]
+    k = _NEXT_AXIS[i-parity+1]
+
+    if frame:
+        ai, ak = ak, ai
+    if parity:
+        aj = -aj
+
+    ai /= 2.0
+    aj /= 2.0
+    ak /= 2.0
+    ci = math.cos(ai)
+    si = math.sin(ai)
+    cj = math.cos(aj)
+    sj = math.sin(aj)
+    ck = math.cos(ak)
+    sk = math.sin(ak)
+    cc = ci*ck
+    cs = ci*sk
+    sc = si*ck
+    ss = si*sk
+
+    quaternion = numpy.empty((4, ), dtype=numpy.float64)
+    if repetition:
+        quaternion[i] = cj*(cs + sc)
+        quaternion[j] = sj*(cc + ss)
+        quaternion[k] = sj*(cs - sc)
+        quaternion[3] = cj*(cc - ss)
+    else:
+        quaternion[i] = cj*sc - sj*cs
+        quaternion[j] = cj*ss + sj*cc
+        quaternion[k] = cj*cs - sj*sc
+        quaternion[3] = cj*cc + sj*ss
+    if parity:
+        quaternion[j] *= -1
+
+    return quaternion
+
 def euclidean_distance(pose_a,pose_b):
     """
     """
@@ -132,11 +188,11 @@ def rotz(t):
     """ 
     Rotation about the z-axis
     """
-    c = np.cos(t)
-    s = np.sin(t)
-    return np.array([[c,  -s,  0],
-                     [s,   c,  0],
-                     [0,   0,  1]])
+    c = numpy.cos(t)
+    s = numpy.sin(t)
+    return numpy.array([[c,  -s,  0],
+                        [s,   c,  0],
+                        [0,   0,  1]])
 
 def compute_corners(bbox):
     """
@@ -159,13 +215,14 @@ def compute_corners(bbox):
     y_corners = [w/2,-w/2,w/2,-w/2]
     z_corners = [0,0,0,0]
 
-    corners_3d = np.vstack([x_corners,y_corners,z_corners])
-    corners_3d = np.dot(R, corners_3d)[0:2]
-    corners_3d = corners_3d + np.vstack([x,y])
+    corners_3d = numpy.vstack([x_corners,y_corners,z_corners])
+    corners_3d = numpy.dot(R, corners_3d)[0:2]
+    corners_3d = corners_3d + numpy.vstack([x,y])
     
     corners = []
     for i in range(4):
-        c = int(round(corners_3d[0,i].item())), int(round(corners_3d[1,i].item()))
+        # c = int(round(corners_3d[0,i].item())), int(round(corners_3d[1,i].item()))
+        c = corners_3d[0,i], corners_3d[1,i]
         corners.append(c)
     corners = tuple(corners)
     return corners
@@ -178,13 +235,21 @@ def iou(bb_1,bb_2):
   corners_1 = compute_corners(bb_1)
   corners_2 = compute_corners(bb_2)
 
+  print("Corners 1: ", corners_1)
+  print("Corners 2: ", corners_2)
+
   # To build the polygon -> Left-bottom corner, Right-bottom, Top-right corner, Top-left corner
 
   b1 = Polygon([corners_1[2],corners_1[3],corners_1[1],corners_1[0]]) 
   b2 = Polygon([corners_2[2],corners_2[3],corners_2[1],corners_2[0]])
+
+  print("b1: ", b1)
+  print("b2: ", b2)
   
   intersection = b1.intersection(b2).area
   union = b1.union(b2).area
+
+  print("I U: ", intersection, union)
 
   if union > 0.0:
     o = intersection / union
