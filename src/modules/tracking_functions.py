@@ -127,8 +127,8 @@ class KalmanBoxTracker(object):
     self.kf.predict()
                       
     self.age += 1
-    if(self.time_since_update>0):
-      self.hit_streak = 0
+    # if(self.time_since_update>0):
+    #   self.hit_streak = 0
     self.time_since_update += 1
     self.history.append(sort_functions.convert_x_to_bbox(self.kf.x))
     return self.history[-1]
@@ -158,9 +158,10 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.001):
   for d,det in enumerate(detections):
     for t,trk in enumerate(trackers):
       iou_matrix[d,t] = geometric_functions.iou(det,trk)
-  print("iou matrix: ", iou_matrix)
+      print("iou: ", iou_matrix[d,t])
+  # print("iou matrix: ", iou_matrix)
   matched_indices = linear_assignment(-iou_matrix) # Hungarian Algorithm
-  print("Matched indices: ", matched_indices)
+  # print("Matched indices: ", matched_indices)
 
   # Unmatched detections
   

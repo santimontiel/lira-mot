@@ -83,13 +83,17 @@ class Sort(object):
     Returns the a similar array, where the last column is the object ID.
     NOTE: The number of objects returned may differ from the number of detections provided.
     """
-    print("dets: ", dets, type(dets))
-    print("types: ", types, type(types))
+
+    for det in dets:
+      print("det: ", det)
+    print("Total trackers: ", len(self.trackers)) # Both preliminar and definitive trackers
+    for trk in self.trackers:
+      print("trk: ", trk.kf.x.reshape(1,-1)) 
+
     self.frame_count += 1
 
     # 1. Get predicted locations from existing trackers
 
-    print("Total trackers: ", len(self.trackers)) # Both preliminar and definitive trackers
     trks = np.zeros((len(self.trackers), 5))
     to_del = []
     ret, ret_type = [], []
@@ -117,23 +121,32 @@ class Sort(object):
 
     for i in unmatched_dets:
         if dets[i,0] != 0 and dets[i,1] != 0:
-          trk = tracking_functions.KalmanBoxTracker(dets[i,:])
-          print("det: ", dets[i,:])
-          print("trk: ", trk.kf.x)
+          trk = tracking_functions.KalmanBoxTracker(dets[i,:]) 
+          print("\n")   
+          print("det: ", dets[i,:]) 
+          print("trk: ", trk.kf.x.reshape(1,-1))   
           print("\033[1;33m"+"Created preliminar tracker"+'\033[0;m')
           self.trackers.append(trk)
-    i = len(self.trackers)
+    
     
     # 4. Store relevant trackers in lists
 
+    # We want to predict the tracker even if it has not been associated to a detection. Nevertheless, if 
+    # it is not matched after max_age frames, the tracker is poped from self.trackers list
+    i = len(self.trackers)
+
     for t,trk in enumerate(self.trackers):
-      if(t not in unmatched_trks):  
-          d = trk.get_state()[0] # Predicted state in next frame
-      if((trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits)):
+      # if(t not in unmatched_trks):  
+      d = trk.get_state()[0] # Predicted state in next frame
+      # if((trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits)):
+      if((trk.time_since_update <= self.max_age) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits)):
           # id+1 as MOT benchmark requires positive 
           ret.append(np.concatenate((d,[trk.id+1])).reshape(1,-1)) 
       i -= 1
       # Remove dead tracklet
+      print("Time since update: ", trk.time_since_update)
+      print("Hit streak: ", trk.hit_streak)
+
       if(trk.time_since_update > self.max_age):
         print("\033[1;36m"+"Deleted preliminar tracker"+'\033[0;m')
         self.trackers.pop(i)

@@ -235,21 +235,21 @@ def iou(bb_1,bb_2):
   corners_1 = compute_corners(bb_1)
   corners_2 = compute_corners(bb_2)
 
-  print("Corners 1: ", corners_1)
-  print("Corners 2: ", corners_2)
+#   print("Corners 1: ", corners_1)
+#   print("Corners 2: ", corners_2)
 
   # To build the polygon -> Left-bottom corner, Right-bottom, Top-right corner, Top-left corner
 
   b1 = Polygon([corners_1[2],corners_1[3],corners_1[1],corners_1[0]]) 
   b2 = Polygon([corners_2[2],corners_2[3],corners_2[1],corners_2[0]])
 
-  print("b1: ", b1)
-  print("b2: ", b2)
+#   print("b1: ", b1)
+#   print("b2: ", b2)
   
   intersection = b1.intersection(b2).area
   union = b1.union(b2).area
 
-  print("I U: ", intersection, union)
+#   print("I U: ", intersection, union)
 
   if union > 0.0:
     o = intersection / union

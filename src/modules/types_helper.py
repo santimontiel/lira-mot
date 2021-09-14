@@ -202,6 +202,7 @@ def tracker_to_marker(tracker,color,stamp):
     tracked_obstacle.header.stamp = stamp
     tracked_obstacle.ns = "tracked_obstacles"
     tracked_obstacle.action = tracked_obstacle.ADD
+    tracked_obstacle.type = 1
         
     tracked_obstacle.id = tracker[5].astype(int)
 
@@ -213,7 +214,7 @@ def tracker_to_marker(tracker,color,stamp):
     tracked_obstacle.scale.y = tracker[3]
     tracked_obstacle.scale.z = 1.5 # TODO: Improve this
     
-    quaternion = geometric_functions.quaternion_from_euler(0,0,-tracker[4])
+    quaternion = geometric_functions.quaternion_from_euler(0,0,tracker[4])
     
     tracked_obstacle.pose.orientation.x = quaternion[0]
     tracked_obstacle.pose.orientation.y = quaternion[1]
@@ -223,6 +224,7 @@ def tracker_to_marker(tracker,color,stamp):
     tracked_obstacle.color.r = color[2]
     tracked_obstacle.color.g = color[1]
     tracked_obstacle.color.b = color[0]
+    tracked_obstacle.color.a = 1.0
 
     tracked_obstacle.lifetime = rospy.Duration(1.0) # 1 second
 
