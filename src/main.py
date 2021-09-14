@@ -14,7 +14,7 @@ from time import time
 import rospy
 import ros_numpy
 import message_filters
-from tf import TransformListener
+# from tf import TransformListener
 from sensor_msgs.msg            import PointCloud2, PointField
 from visualization_msgs.msg     import Marker, MarkerArray
 from jsk_recognition_msgs.msg   import BoundingBox, BoundingBoxArray
@@ -28,7 +28,7 @@ from sklearn.cluster            import DBSCAN
 import open3d as o3d
 
 # -- Module imports
-from modules import (types_helper, detection_helper, geometric_functions, ros_functions, iou_3d_functions)
+from modules import (types_helper, detection_helper, geometric_functions, ros_functions, iou_3d_functions, sort_functions)
 from modules.objects import (Cluster, BoundingBox3D, euclidean_distance, merging_clusters)
 
 class LiRa():
@@ -39,8 +39,34 @@ class LiRa():
     def __init__(self):
         """ Initialize ROS architecture for LiRa-MOT.
         """
+        # -- Debug
+        self.debug_lidar = False
+        self.debug_radar = False
+        self.debug_fusion = True
+        self.debug_mot = False
+
         # Node initialization
         rospy.init_node("lira_mot_node")
+
+         # -- Tf listener to transform radar coordinates to lidar coordinates
+
+        ########### TODO: Improve this directly listening the transform here (Python3 - ROS Noetic)
+
+        aux_tf = rospy.wait_for_message('t4ac/transform/laser2radar', Transform)
+        t = aux_tf.translation
+        trans = [t.x,t.y,t.z]
+        r = aux_tf.rotation
+        rot = [r.x,r.y,r.z,r.w]
+        rot_matrix = types_helper.quaternion_matrix(rot) # Quaternion to Numpy matrix
+            
+        self.tf_laser2radar = rot_matrix
+        self.tf_laser2radar[:3,3] = self.tf_laser2radar[:3,3] + trans
+
+        # print(">>> TF Laser to RADAR: ", self.tf_laser2radar)
+
+        # Multi-Object Tracker
+        self.mot_tracker = sort_functions.Sort(max_age=2,min_hits=1, iou_threshold=0.001)
+        self.colours = np.random.rand(32,3)
 
         # -- LiDAR and RADAR subscribers
         self.sub_lidar_raw_data         = message_filters.Subscriber("/carla/ego_vehicle/lidar/lidar1/point_cloud", PointCloud2)
@@ -66,39 +92,25 @@ class LiRa():
 
         # -- Sensor Fusion publishers
 
-        self.pub_merged_marker_bb       = rospy.Publisher("/t4ac/perception/merged_marker_bboxes", MarkerArray, queue_size=10)
-        
-        # -- Tf listener to transform radar coordinates to lidar coordinates
+        self.pub_merged_marker_bb       = rospy.Publisher("/t4ac/perception/merged_bounding_bboxes", MarkerArray, queue_size=10)
 
-        ########### TODO: Improve this directly listening the transform here (Python3 - ROS Noetic)
-        """
-        aux_tf = rospy.wait_for_message('t4ac/transform/laser2radar', Transform)
-        t = aux_tf.translation
-        trans = [t.x,t.y,t.z]
-        r = aux_tf.rotation
-        rot = [r.x,r.y,r.z,r.w]
-        rot_matrix = types_helper.quaternion_matrix(rot) # Quaternion to Numpy matrix
-            
-        self.tf_laser2radar = rot_matrix
-        self.tf_laser2radar[:3,3] = self.tf_laser2radar[:3,3] + trans
+        # -- Multi-Object Tracking publishers
 
-        # print(">>> TF Laser to RADAR: ", self.tf_laser2radar)
-        """
+        self.pub_mot_marker_bb          = rospy.Publisher("/t4ac/perception/mot_bounding_bboxes", MarkerArray, queue_size=10)
+
         ###########
         
-        self.listener = TransformListener()
+        # self.listener = TransformListener()      
 
-        # Multi-Object Tracker
-
-        self.mot_tracker = sort_functions.Sort(max_age=1,min_hits=3)
+        
 
     #################################################################
     ### SYNC SENSORS CALLBACK #######################################
     #################################################################
     def sensors_cb(self, lidar_data: object, radar_data: object):
         print("----------------------------------------------------------------------------------------")
-        print(f">>> LiRa-MOT. Radar and LiDAR processing            >>>")
-        print(f"-------------------------------------------------------\n")
+        # print(f">>> LiRa-MOT. Radar and LiDAR processing            >>>")
+        # print(f"-------------------------------------------------------\n")
 
         #################################################################
         ### TRANSFORM LISTENER FOR SENSORS ##############################
@@ -108,7 +120,7 @@ class LiRa():
         #################################################################
         ### LIDAR OBJECT DETECTION PIPELINE #############################
         #################################################################
-        print(f">>> 1. LiDAR point cloud processing --------------- >>>")
+        if self.debug_lidar: print(f">>> 1. LiDAR point cloud processing --------------- >>>")
         lt1 = time()
 
         # 1. Read point cloud msg as numpy array
@@ -141,15 +153,16 @@ class LiRa():
 
         # 0. Auxiliary lidar code
         # a. Logging stats to user
-        # print(f"Lidar original points: {lidar_np_orig.shape}")
-        # print(f"Lidar filtered points: {lidar_np_filt.shape}")
-        # print(f"Obstacle points: {lidar_o3d_obst}")
-        # if (len(lidar_labels) != 0):
-        #     print(f"There are {len(lidar_labels)} elements and {max(lidar_labels)+1} clusters.")
-        # else:
-        #     print(f"Lidar labels are empty.")
-        # print("LiDAR labels: ", lidar_labels)
-        print("LiDAR bounding boxes: ", len(lidar_mbb_array))
+        if self.debug_lidar:
+            print(f"Lidar original points: {lidar_np_orig.shape}")
+            print(f"Lidar filtered points: {lidar_np_filt.shape}")
+            print(f"Obstacle points: {lidar_o3d_obst}")
+            if (len(lidar_labels) != 0):
+                print(f"There are {len(lidar_labels)} elements and {max(lidar_labels)+1} clusters.")
+            else:
+                print(f"Lidar labels are empty.")
+            print("LiDAR labels: ", lidar_labels)
+            print("LiDAR Bounding Boxes: ", len(lidar_mbb_msg.markers))
 
         # b. Building markers from objects
         lidar_marker_array_msg = types_helper.detections_to_marker_array_msg(lidar_merged_clusters, lidar_data, "lidar_vis", "blue")
@@ -165,14 +178,14 @@ class LiRa():
 
         # d. Lidar object detection pipeline ends
         lt2 = time()
-        print(f"Time consumed during LiDAR pipeline: {lt2-lt1}\n")
+        if self.debug_lidar: print(f"Time consumed during LiDAR pipeline: {lt2-lt1}\n")
 
 
         
         #################################################################
         ### RADAR OBJECT DETECTION PIPELINE #############################
         #################################################################
-        print(f">>> 2. Radar point cloud processing --------------- >>>")
+        if self.debug_radar: print(f">>> 2. Radar point cloud processing --------------- >>>")
         rt1 = time()
             
         # 1. Conversion from sensor_msgs::PointCloud2 to numpy xyzv_array
@@ -208,68 +221,109 @@ class LiRa():
 
         # 0. Auxiliary radar code
         # a. Log info to user
-        # print(f"Points: {self.radar_np_pcd.shape}")
-        # print(f"DBSCAN took: {rt2-rt1} s")
-        # print(f"Number of clusters found: {max(self.dbscan.labels_)+1}")
-        # print(f"Number of clustered points: {len(self.dbscan.labels_)-list(self.dbscan.labels_).count(-1)}")
-        # print(f"Number of noise points: {list(self.dbscan.labels_).count(-1)}")
-        # print(f"Time consumed classifying clusters: {rt4-rt3}")
+        if self.debug_radar:
+            print(f"Points: {self.radar_np_pcd.shape}")
+            print(f"DBSCAN took: {rt2-rt1} s")
+            print(f"Number of clusters found: {max(self.dbscan.labels_)+1}")
+            print(f"Number of clustered points: {len(self.dbscan.labels_)-list(self.dbscan.labels_).count(-1)}")
+            print(f"Number of noise points: {list(self.dbscan.labels_).count(-1)}")
+            print(f"Time consumed classifying clusters: {rt4-rt3}")
 
         # b. Building markers from objects
         detection_markers = types_helper.detections_to_marker_array_msg(radar_clusters, radar_data, "radarspace", "pink")
         
         # c. Convert to LiDAR coordinates
-        """
+
         radar_lidar_frame_list = []
 
         for radar_bb in radar_bb_array:
             radar_lidar_frame = types_helper.radar2laser_coordinates(self.tf_laser2radar,radar_bb)
             radar_lidar_frame_list.append(radar_lidar_frame)
         
-        radar_bb_array_msg = types_helper.radar_bounding_boxes_to_ros_msg(radar_lidar_frame_list, radar_data, "radar_bb")
-        print("RADAR bounding boxes: ", len(radar_bb_array_msg.markers))
+        # TODO: Remove (jsk bouding boxes)
+        # radar_bb_array_msg = types_helper.radar_bounding_boxes_to_ros_msg(radar_lidar_frame_list, radar_data, "radar_bb")
+        if self.debug_radar: print("RADAR bounding boxes: ", len(radar_lidar_frame_list))
         
-        radar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in radar_bb_array]
-        radar_mbb_msg = types_helper.marker_bbox_ros_msg(radar_mbb_array, "magenta", radar_data, "radar_ns")
-        """
+        # radar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in radar_bb_array]
+        # radar_mbb_array = [el.format_to_marker_bb_msg() for el in radar_bb_array]
+        
+        radar_mbb_msg = types_helper.marker_bbox_ros_msg(radar_lidar_frame_list, "magenta", radar_data, "radar_ns")
+        # radar_mbb_msg = types_helper.marker_bbox_ros_msg(radar_mbb_array, "magenta", radar_data, "radar_ns")
+
         # d. publishing messages to ros topics
         self.pub_radar_visualization.publish(detection_markers)
-        # self.pub_radar_bounding_boxes.publish(radar_mbb_msg)
+        self.pub_radar_bounding_boxes.publish(radar_mbb_msg)
 
         # e. Radar object detection pipeline ends
         rtf = time()
-        print(f"Time consumed during RADAR pipeline: {rtf-rt1}")
+        if self.debug_radar: print(f"Time consumed during RADAR pipeline: {rtf-rt1}\n")
 
         #################################################################
         ### SENSOR FUSION PIPELINE #############################
         #################################################################
+        if self.debug_fusion: print(f">>> 3. Sensor Fusion processing --------------- >>>")
+        sft1 = time()
+
+        merged_bboxes = []
         
         for i,lidar_obstacle in enumerate(lidar_mbb_array):
-            print(f"LiDAR obstacle {i}: {lidar_obstacle}")
+            if self.debug_fusion:
+                print(".................")
+                print(f"LiDAR obstacle {i}: {lidar_obstacle}")
             lidar_3d_corners = iou_3d_functions.compute_box_3d(lidar_obstacle)
+            iou3d_min = 0.01
 
-            for j,radar_obstacle in enumerate(radar_mbb_array):
-                print(f"RADAR obstacle {j}: {radar_obstacle}")
+            for j,radar_obstacle in enumerate(radar_lidar_frame_list):
                 radar_3d_corners = iou_3d_functions.compute_box_3d(radar_obstacle)
                 iou3d, _ = iou_3d_functions.box3d_iou(lidar_3d_corners,radar_3d_corners)
-                print("iou3d: ", iou3d)
+                if self.debug_fusion: 
+                    print(f"RADAR obstacle {j}: {radar_obstacle}")
+                    print("iou3d: ", iou3d)
+                merged_bbox = []
+                if iou3d > iou3d_min:
+                    iou3d_min = iou3d
+                    merged_bbox = [lidar_obstacle[0],lidar_obstacle[1],lidar_obstacle[2], # x,y,z
+                                   lidar_obstacle[3],lidar_obstacle[4],lidar_obstacle[5], # l,w,h
+                                   lidar_obstacle[6], 0, "generic_object"] # TODO: Improve object type and velocity
+                if merged_bbox: # Not empty
+                    print("\033[1;31m"+"Merged bbox: "+'\033[0;m', merged_bbox)
+                    merged_bboxes.append(merged_bbox)
 
-        """
-        xyz, lwh, yaw, vel
+        merged_bboxes_msg = types_helper.marker_bbox_ros_msg(merged_bboxes, "black", lidar_data, "sensor_fusion_ns")
+        if self.debug_fusion: self.pub_merged_marker_bb.publish(merged_bboxes_msg)
 
-        # TODO: Transform to Global Coordinates
-
-        # self.pub_merged_marker_bb.publish(merged_obstacles_marker_array)
+        sft2 = time()
+        if self.debug_fusion: print(f"Time consumed during Sensor Fusion pipeline: {sft2-sft1}\n")
 
         #################################################################
         ### MULTI-OBJECT TRACKING PIPELINE #############################
         #################################################################
+        if self.debug_mot: print(f">>> 4. Multi-Object Tracking processing --------------- >>>")
+        mott1 = time()
 
-        merged_objects, types = sort_functions.merged_bboxes_to_xywlthetascore_types(merged_objects)
-        print("Merged objects: ", merged_objects)
-        print("Types: ", types)
-        # trackers = self.mot_tracker.update(METER AQUÍ LOS OBJETOS FUSIONADOS EN FORMATO T4AC BEV DETECTION)
-        """
+        merged_objects, types = sort_functions.merged_bboxes_to_xywlthetascore_types(merged_bboxes)
+        if self.debug_mot: print("Merged objects: ", merged_objects)
+        # print("Types: ", types)
+        trackers, types = self.mot_tracker.update(merged_objects, types)
+
+        print("\033[1;35m"+"Final Trackers: "+'\033[0;m', trackers)
+        stamp = lidar_data.header.stamp
+        tracker_marker_list = MarkerArray()
+
+        for tracker in trackers:
+            color = self.colours[tracker[5].astype(int)%32]
+            tracker_marker = types_helper.tracker_to_marker(tracker,color,stamp)
+            tracker_marker_list.markers.append(tracker_marker)
+        if self.debug_mot: print("MOT markers: ", len(tracker_marker_list.markers))
+        self.pub_mot_marker_bb.publish(tracker_marker_list)
+
+        mott2 = time()
+        if self.debug_mot: print(f"Time consumed during Multi-Object Tracking pipeline: {mott2-mott1}")
+
+        # TODO: 
+        # 1. yaw siempre 0 del lidar?
+        # 2. poner la velocidad del radar bien en las merged_bboxes
+        # 3. Transform to global coordinates to conduct MOT
 
 def main() -> None:
     lira_mot_node = LiRa()

@@ -128,7 +128,6 @@ class Sort(object):
           print("\033[1;33m"+"Created preliminar tracker"+'\033[0;m')
           self.trackers.append(trk)
     
-    
     # 4. Store relevant trackers in lists
 
     # We want to predict the tracker even if it has not been associated to a detection. Nevertheless, if 
@@ -142,14 +141,15 @@ class Sort(object):
       if((trk.time_since_update <= self.max_age) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits)):
           # id+1 as MOT benchmark requires positive 
           ret.append(np.concatenate((d,[trk.id+1])).reshape(1,-1)) 
-      i -= 1
+      # i -= 1
       # Remove dead tracklet
       print("Time since update: ", trk.time_since_update)
       print("Hit streak: ", trk.hit_streak)
 
       if(trk.time_since_update > self.max_age):
         print("\033[1;36m"+"Deleted preliminar tracker"+'\033[0;m')
-        self.trackers.pop(i)
+        # self.trackers.pop(i)
+        self.trackers.pop(t)
 
     # 5. Return final trackers
 

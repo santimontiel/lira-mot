@@ -3,8 +3,8 @@
 <launch>
 
     <!-- Launch main script -->
-    <!-- node pkg="clira_damot" type="tf_lidar2radar_ros_node.py" name="tf_lidar2radar_ros_node" output="screen"/ -->
-    <node pkg="clira_damot" type="main.py" name="lira_mot_node" output="screen" />
+    <node pkg="clira_damot" type="tf_lidar2radar_ros_node.py" name="tf_lidar2radar_ros_node" output="screen"/>
+    <node pkg="clira_damot" type="main.py" name="lira_mot_node" output="screen"/>
     
     <!-- Frames -->
     <arg name="t4ac_frames" value="/t4ac/frames"/>
