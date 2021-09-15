@@ -9,6 +9,7 @@
 # -- General purpose imports
 import numpy as np
 from time import time
+import csv
 
 # -- ROS imports
 import rospy
@@ -42,7 +43,7 @@ class LiRa():
         # -- Debug
         self.debug_lidar = False
         self.debug_radar = False
-        self.debug_fusion = True
+        self.debug_fusion = False
         self.debug_mot = False
 
         # Node initialization
@@ -91,12 +92,14 @@ class LiRa():
         self.pub_radar_bounding_boxes   = rospy.Publisher("/t4ac/perception/radar_bounding_boxes", MarkerArray, queue_size=10)
 
         # -- Sensor Fusion publishers
-
         self.pub_merged_marker_bb       = rospy.Publisher("/t4ac/perception/merged_bounding_bboxes", MarkerArray, queue_size=10)
 
         # -- Multi-Object Tracking publishers
-
         self.pub_mot_marker_bb          = rospy.Publisher("/t4ac/perception/mot_bounding_bboxes", MarkerArray, queue_size=10)
+
+        # -- File serializer CSV
+        # self.file = open("/home/robesafe/santi_data.csv", "w")
+        # self.writer = csv.writer(self.file)
 
         ###########
         
@@ -239,9 +242,7 @@ class LiRa():
         for radar_bb in radar_bb_array:
             radar_lidar_frame = types_helper.radar2laser_coordinates(self.tf_laser2radar,radar_bb)
             radar_lidar_frame_list.append(radar_lidar_frame)
-        
-        # TODO: Remove (jsk bouding boxes)
-        # radar_bb_array_msg = types_helper.radar_bounding_boxes_to_ros_msg(radar_lidar_frame_list, radar_data, "radar_bb")
+    
         if self.debug_radar: print("RADAR bounding boxes: ", len(radar_lidar_frame_list))
         
         # radar_mbb_array = [el.format_to_marker_bb_msg(el.center, el.dimensions, el.yaw) for el in radar_bb_array]
@@ -284,7 +285,7 @@ class LiRa():
                     iou3d_min = iou3d
                     merged_bbox = [lidar_obstacle[0],lidar_obstacle[1],lidar_obstacle[2], # x,y,z
                                    lidar_obstacle[3],lidar_obstacle[4],lidar_obstacle[5], # l,w,h
-                                   lidar_obstacle[6], 0, "generic_object"] # TODO: Improve object type and velocity
+                                   lidar_obstacle[6],radar_obstacle[7], "generic_object"] # TODO: Improve object type and velocity
                 if merged_bbox: # Not empty
                     print("\033[1;31m"+"Merged bbox: "+'\033[0;m', merged_bbox)
                     merged_bboxes.append(merged_bbox)
@@ -321,9 +322,25 @@ class LiRa():
         if self.debug_mot: print(f"Time consumed during Multi-Object Tracking pipeline: {mott2-mott1}")
 
         # TODO: 
+
         # 1. yaw siempre 0 del lidar?
-        # 2. poner la velocidad del radar bien en las merged_bboxes
-        # 3. Transform to global coordinates to conduct MOT
+        # 2. poner la velocidad del radar bien en las merged_bboxes -> Pasarlo a globales
+        # 3. Intentar refinar hiperparámetros
+        # 4. Corregir coche girado inicialmente (casi siempre), es el segundo que aparece en campus_demo_final_v2.bag
+
+        #################################################################
+        ### TIME ANALYSIS ###############################################
+        #################################################################
+        '''
+        self.writer.writerow([
+            mott2-lt1,                                              # Total callback time
+            lt2-lt1,                                                # LiDAR Object Detection pipeline time
+            rt2-rt1,                                                # RADAR Object Detection pipeline time
+            sft2-sft1,                                              # Sensor Fusion pipeline time
+            mott2-mott1                                             # Multi-Object Tracking pipeline time
+        ])
+        '''
+
 
 def main() -> None:
     lira_mot_node = LiRa()

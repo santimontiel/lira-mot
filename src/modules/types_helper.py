@@ -64,7 +64,7 @@ def radar2laser_coordinates(tf_laser2radar,radar_bounding_box):
 
   dim = radar_bounding_box.dimensions
   laser_dim = [dim[0],dim[1],dim[2]]
-  laser_location = laser_location[:-1].tolist() + laser_dim + [radar_bounding_box.yaw]
+  laser_location = laser_location[:-1].tolist() + laser_dim + [radar_bounding_box.yaw] + [radar_bounding_box.speed]
 
   return laser_location
 
@@ -111,38 +111,6 @@ def bounding_boxes_to_ros_msg(bboxes: List[BoundingBox3D], cb_msg: object, names
         bbox_msg.value = 0.0
         bbox_msg.label = 0
         bbox_array.boxes.append(bbox_msg)
-    return bbox_array
-
-def radar_bounding_boxes_to_ros_msg(bboxes: List, cb_msg: object, namespace: str) -> BoundingBoxArray:
-    """Create a jsk_recognition_msgs.BoundingBoxArray from a list of
-    BoundingBox3D dataclass object.
-    """
-    bbox_array = MarkerArray()
-
-    for (idx, bbox) in enumerate(bboxes):
-        bbox_msg = Marker()
-        bbox_msg.header.stamp = cb_msg.header.stamp
-        bbox_msg.header.frame_id = 'ego_vehicle/lidar/lidar1'
-        bbox_msg.type = 1
-    
-        bbox_msg.pose.position.x = bbox[0]
-        bbox_msg.pose.position.y = bbox[1]
-        bbox_msg.pose.position.z = bbox[2]
-
-        q = yaw2quaternion(bbox[6])
-
-        bbox_msg.pose.orientation.x = q[1] 
-        bbox_msg.pose.orientation.y = q[2]
-        bbox_msg.pose.orientation.z = q[3]
-        bbox_msg.pose.orientation.w = q[0]
-
-        bbox_msg.scale.x = bbox[3] / 10
-        bbox_msg.scale.y = bbox[4] / 10
-        bbox_msg.scale.z = bbox[5] / 10
-
-        bbox_msg.color = colors[2]
-
-        bbox_array.markers.append(bbox_msg)
     return bbox_array
 
 def marker_bbox_ros_msg(bboxes: List[float], color: str, cb_msg: object, namespace: str) -> MarkerArray:
