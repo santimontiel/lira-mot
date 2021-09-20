@@ -1,8 +1,0 @@
-<?xml version="1.0" ?>
-
-<launch>
-
-    <!-- Launch simulation -->
-    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find clira_damot)/rviz/config.rviz"/>
-
-</launch>

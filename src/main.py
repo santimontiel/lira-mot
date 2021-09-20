@@ -49,7 +49,7 @@ class LiRa():
         # Node initialization
         rospy.init_node("lira_mot_node")
 
-         # -- Tf listener to transform radar coordinates to lidar coordinates
+        # -- Tf listener to transform radar coordinates to lidar coordinates
 
         ########### TODO: Improve this directly listening the transform here (Python3 - ROS Noetic)
 
@@ -65,8 +65,11 @@ class LiRa():
 
         # print(">>> TF Laser to RADAR: ", self.tf_laser2radar)
 
+        # -- Tf listener to transform lidar coordinates to map coordinates
+        self.sub_tfmap2lidar = rospy.Subscriber("/t4ac/transform/map2lidar", Transform, self.map2lidar_callback)
+
         # Multi-Object Tracker
-        self.mot_tracker = sort_functions.Sort(max_age=2,min_hits=1, iou_threshold=0.001)
+        self.mot_tracker = sort_functions.Sort(max_age=5,min_hits=1, iou_threshold=0.001)
         self.colours = np.random.rand(32,3)
 
         # -- LiDAR and RADAR subscribers
@@ -105,7 +108,18 @@ class LiRa():
         
         # self.listener = TransformListener()      
 
-        
+    def map2lidar_callback(self, msg):
+        """
+        """
+
+        t = msg.translation
+        trans = [t.x,t.y,t.z]
+        r = msg.rotation
+        rot = [r.x,r.y,r.z,r.w]
+        rot_matrix = types_helper.quaternion_matrix(rot) # Quaternion to Numpy matrix
+            
+        self.tf_map2lidar = rot_matrix
+        self.tf_map2lidar[:3,3] = self.tf_map2lidar[:3,3] + trans
 
     #################################################################
     ### SYNC SENSORS CALLBACK #######################################
@@ -291,7 +305,7 @@ class LiRa():
                     merged_bboxes.append(merged_bbox)
 
         merged_bboxes_msg = types_helper.marker_bbox_ros_msg(merged_bboxes, "black", lidar_data, "sensor_fusion_ns")
-        if self.debug_fusion: self.pub_merged_marker_bb.publish(merged_bboxes_msg)
+        self.pub_merged_marker_bb.publish(merged_bboxes_msg)
 
         sft2 = time()
         if self.debug_fusion: print(f"Time consumed during Sensor Fusion pipeline: {sft2-sft1}\n")
@@ -315,6 +329,9 @@ class LiRa():
             color = self.colours[tracker[5].astype(int)%32]
             tracker_marker = types_helper.tracker_to_marker(tracker,color,stamp)
             tracker_marker_list.markers.append(tracker_marker)
+        # print("LiDAR based trackers: ", trackers)
+        # map_based_trackers = [types_helper.lidar2map_coordinates(self.tf_map2lidar,tracker) for tracker in trackers]
+        # print("Map based trackers: ", map_based_trackers)
         if self.debug_mot: print("MOT markers: ", len(tracker_marker_list.markers))
         self.pub_mot_marker_bb.publish(tracker_marker_list)
 
