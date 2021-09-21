@@ -56,7 +56,7 @@ def lidar2map_coordinates(tf_map2lidar,lidar_bbox):
   """
   """
 
-  lidar_location = lidar_bbox[:2]
+  lidar_location = lidar_bbox[:2].tolist()
   lidar_location.append(0) # Z-component (TODO: Improve SORT to 3D-SORT to consider height and z-component)
   lidar_location.append(1) # To homogeneous coordinates
   lidar_location = np.array(lidar_location).reshape(-1,1)

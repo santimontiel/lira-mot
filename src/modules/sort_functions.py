@@ -71,7 +71,7 @@ class Sort(object):
     self.trackers = []
     self.frame_count = 0
 
-  def update(self, dets, types):
+  def update(self, dets, types, debug_mot = False):
     """
     Params:
       dets - a numpy array of detections (x,y,l,w,theta,vel), where x,y are the centroid coordinates (BEV plane), w and l the
@@ -84,11 +84,12 @@ class Sort(object):
     NOTE: The number of objects returned may differ from the number of detections provided.
     """
 
-    for det in dets:
-      print("det: ", det)
-    print("Total trackers: ", len(self.trackers)) # Both preliminar and definitive trackers
-    for trk in self.trackers:
-      print("trk: ", trk.kf.x.reshape(1,-1)) 
+    if debug_mot:
+      for det in dets:
+        print("det: ", det)
+      print("Total trackers: ", len(self.trackers)) # Both preliminar and definitive trackers
+      for trk in self.trackers:
+        print("trk: ", trk.kf.x.reshape(1,-1)) 
 
     self.frame_count += 1
 
@@ -96,7 +97,7 @@ class Sort(object):
 
     trks = np.zeros((len(self.trackers), 5))
     to_del = []
-    ret, ret_type = [], []
+    ret, ret_type, ret_vel = [], [], []
     for t, trk in enumerate(trks):
       pos = self.trackers[t].predict()[0]
       trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
@@ -114,7 +115,9 @@ class Sort(object):
     for t,trk in enumerate(self.trackers):
       if (t not in unmatched_trks):
         d = matched[np.where(matched[:,1]==t)[0],0][0]
-        ret_type.append(types[d])                                                      
+        ret_type.append(types[d]) 
+        ret_vel.append(dets[d][5])
+
         trk.update(dets[d,:]) # Update the space state
 
     # 3. Create and initialise preliminar trackers for unmatched detections
@@ -122,10 +125,11 @@ class Sort(object):
     for i in unmatched_dets:
         if dets[i,0] != 0 and dets[i,1] != 0:
           trk = tracking_functions.KalmanBoxTracker(dets[i,:]) 
-          print("\n")   
-          print("det: ", dets[i,:]) 
-          print("trk: ", trk.kf.x.reshape(1,-1))   
-          print("\033[1;33m"+"Created preliminar tracker"+'\033[0;m')
+          if debug_mot:
+            print("\n")   
+            print("det: ", dets[i,:]) 
+            print("trk: ", trk.kf.x.reshape(1,-1))   
+            print("\033[1;33m"+"Created preliminar tracker"+'\033[0;m')
           self.trackers.append(trk)
     
     # 4. Store relevant trackers in lists
@@ -143,24 +147,27 @@ class Sort(object):
           ret.append(np.concatenate((d,[trk.id+1])).reshape(1,-1)) 
       # i -= 1
       # Remove dead tracklet
-      print("Time since update: ", trk.time_since_update)
-      print("Hit streak: ", trk.hit_streak)
+      if debug_mot:
+        print("Time since update: ", trk.time_since_update)
+        print("Hit streak: ", trk.hit_streak)
 
       if(trk.time_since_update > self.max_age):
-        print("\033[1;36m"+"Deleted preliminar tracker"+'\033[0;m')
+        if debug_mot:
+          print("\033[1;36m"+"Deleted preliminar tracker"+'\033[0;m')
         # self.trackers.pop(i)
         self.trackers.pop(t)
 
     # 5. Return final trackers
 
-    print("Number of trackers: ", len(ret))
+    if debug_mot: print("Number of trackers: ", len(ret))
     if(len(ret)>0 and self.frame_count > 1):
       ret = np.concatenate(ret)
       ret_type = np.array(ret_type)
-      return ret, ret_type
-    return [], [] 
+      ret_vel = np.array(ret_vel)
+      return ret, ret_type, ret_vel
+    return [], [], [] 
 
-def merged_bboxes_to_xywlthetascore_types(merged_bboxes):
+def merged_bboxes_to_xylwthetascore_types(merged_bboxes):
   """
   merged_bboxes = [[x,y,z,l,w,h,theta,vel,type]]
   """
@@ -197,6 +204,8 @@ def merged_bboxes_to_xywlthetascore_types(merged_bboxes):
   else:
     bboxes = np.array([[0,0,0,0,0,0]])
     types = np.array(["no_objects"])
+
+  print("bboxes: ", bboxes)
 
   return bboxes,types
 

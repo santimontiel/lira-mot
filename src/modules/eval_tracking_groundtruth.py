@@ -24,10 +24,7 @@ class TrackingEvaluator:
             "/tf", TFMessage, self.cb_tf_lidar_2_map
         )
 
-        # File to save the results
-        if self.serialize:
-            self.file = open("/home/santi/Workspace/ros_ws/src/lira-mot/eval_tracking.csv", "w")
-            self.writer = csv.writer(self.file)
+        
 
     def cb_tf_lidar_2_map(self, msg):
         pass

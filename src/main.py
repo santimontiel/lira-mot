@@ -10,6 +10,7 @@
 import numpy as np
 from time import time
 import csv
+import math
 
 # -- ROS imports
 import rospy
@@ -20,6 +21,9 @@ from sensor_msgs.msg            import PointCloud2, PointField
 from visualization_msgs.msg     import Marker, MarkerArray
 from jsk_recognition_msgs.msg   import BoundingBox, BoundingBoxArray
 from geometry_msgs.msg          import Point, Transform
+from derived_object_msgs.msg    import Object, ObjectArray
+from carla_msgs.msg             import CarlaEgoVehicleInfo
+from nav_msgs.msg               import Odometry
 
 # -- Scikit-Learn imports
 from sklearn.cluster            import DBSCAN
@@ -32,7 +36,7 @@ import open3d as o3d
 from modules import (types_helper, detection_helper, geometric_functions, ros_functions, iou_3d_functions, sort_functions)
 from modules.objects import (Cluster, BoundingBox3D, euclidean_distance, merging_clusters)
 
-class LiRa():
+class LiRaMOT():
 
     #################################################################
     ### INIT FUNCTION ###############################################
@@ -40,14 +44,22 @@ class LiRa():
     def __init__(self):
         """ Initialize ROS architecture for LiRa-MOT.
         """
+        ego_vehicle_info = rospy.wait_for_message('/carla/ego_vehicle/vehicle_info', CarlaEgoVehicleInfo)
+        self.ego_vehicle_id = ego_vehicle_info.id
+        self.sub_carla_objects          = rospy.Subscriber("/carla/objects", ObjectArray, self.carla_objects_callback)
+        self.ego_vehicle_velocity = 0
+        self.sub_ego_vehicle_pose = rospy.Subscriber("/t4ac/localization/pose", Odometry, self.ego_vehicle_pose_callback)
+
         # -- Debug
         self.debug_lidar = False
         self.debug_radar = False
         self.debug_fusion = False
         self.debug_mot = False
-
-        # Node initialization
-        rospy.init_node("lira_mot_node")
+        self.serialize = True
+        self.carla_objects_flag = False
+        if self.serialize:
+            self.file = open("/home/robesafe/t4ac_ws/src/t4ac_architecture/lira-mot/results/eval_tracking_2.csv", "w") # File to save the results
+            self.writer = csv.writer(self.file)
 
         # -- Tf listener to transform radar coordinates to lidar coordinates
 
@@ -103,11 +115,33 @@ class LiRa():
         # -- File serializer CSV
         # self.file = open("/home/robesafe/santi_data.csv", "w")
         # self.writer = csv.writer(self.file)
+        
 
         ###########
         
-        # self.listener = TransformListener()      
+        # self.listener = TransformListener() 
 
+    def ego_vehicle_pose_callback(self, msg):
+        """
+        """
+
+        self.ego_vehicle_velocity = math.sqrt(pow(msg.twist.twist.linear.x,2)+pow(msg.twist.twist.linear.y,2))
+    def carla_objects_callback(self, msg):
+        """
+        """
+        for carla_object in msg.objects:
+            # print(f"{carla_object.id} is {carla_object.classification}")
+            # print('\033[94m' + '\033[1m' + "ID is: " + str(carla_object.id) + '\033[0m')                            # Print the ID of the pedestrian
+            # print(carla_object.pose.position.x)                  # Print the x coordinate of the pedestrian
+            # print(carla_object.pose.position.y)                  # Print the y coordinate of the pedestrian
+            # print(carla_object.pose.position.z)                  # Print the z coordinate of the pedestrian
+            if (carla_object.id != self.ego_vehicle_id):
+                self.gt_frame = msg.header.seq
+                self.gtx = carla_object.pose.position.x
+                self.gty = carla_object.pose.position.y
+                self.gtz = carla_object.pose.position.z
+                self.vel_lin = math.sqrt(pow(carla_object.twist.linear.x,2)+pow(carla_object.twist.linear.y,2))
+                self.carla_objects_flag = True
     def map2lidar_callback(self, msg):
         """
         """
@@ -126,6 +160,7 @@ class LiRa():
     #################################################################
     def sensors_cb(self, lidar_data: object, radar_data: object):
         print("----------------------------------------------------------------------------------------")
+        if self.carla_objects_flag: print("Object gt: ", self.gtx, self.gty, self.gtz, self.vel_lin)
         # print(f">>> LiRa-MOT. Radar and LiDAR processing            >>>")
         # print(f"-------------------------------------------------------\n")
 
@@ -316,12 +351,12 @@ class LiRa():
         if self.debug_mot: print(f">>> 4. Multi-Object Tracking processing --------------- >>>")
         mott1 = time()
 
-        merged_objects, types = sort_functions.merged_bboxes_to_xywlthetascore_types(merged_bboxes)
+        merged_objects, types = sort_functions.merged_bboxes_to_xylwthetascore_types(merged_bboxes)
         if self.debug_mot: print("Merged objects: ", merged_objects)
-        # print("Types: ", types)
-        trackers, types = self.mot_tracker.update(merged_objects, types)
 
-        print("\033[1;35m"+"Final Trackers: "+'\033[0;m', trackers)
+        trackers, types, vels = self.mot_tracker.update(merged_objects, types, self.debug_mot)
+
+        if self.debug_mot: print("\033[1;35m"+"Final Trackers: "+'\033[0;m', trackers)
         stamp = lidar_data.header.stamp
         tracker_marker_list = MarkerArray()
 
@@ -329,22 +364,48 @@ class LiRa():
             color = self.colours[tracker[5].astype(int)%32]
             tracker_marker = types_helper.tracker_to_marker(tracker,color,stamp)
             tracker_marker_list.markers.append(tracker_marker)
-        # print("LiDAR based trackers: ", trackers)
-        # map_based_trackers = [types_helper.lidar2map_coordinates(self.tf_map2lidar,tracker) for tracker in trackers]
-        # print("Map based trackers: ", map_based_trackers)
+
+        map_based_trackers = [types_helper.lidar2map_coordinates(self.tf_map2lidar,tracker) for tracker in trackers]
+        print("Trackers: ", map_based_trackers)
+        print("Types: ", types)
+        print("Velocities: ", vels)
         if self.debug_mot: print("MOT markers: ", len(tracker_marker_list.markers))
         self.pub_mot_marker_bb.publish(tracker_marker_list)
 
         mott2 = time()
         if self.debug_mot: print(f"Time consumed during Multi-Object Tracking pipeline: {mott2-mott1}")
+                        
+        # Serialize results
+
+        if len(map_based_trackers) > 0 and sum(merged_objects[0]) > 0 and len(vels) > 0:
+            tr_x = map_based_trackers[0][0]
+            tr_y = map_based_trackers[0][1]
+            tr_vel = self.ego_vehicle_velocity + vels[0] # UFFFFFF MIS OJOSSSSSSS
+        else:
+            tr_x = 2000
+            tr_y = 2000
+            tr_vel = 2000
+
+        if self.serialize: 
+            self.writer.writerow([
+            self.gt_frame,                     # Frame (Seq)
+            self.gtx,                          # X-coordinate of the pedestrian
+            self.gty,                          # Y-coordinate of the pedestrian
+            self.vel_lin,                      # Linear velocity (Module xy) 
+            tr_x,
+            tr_y,
+            tr_vel      
+            ])
 
         # TODO: 
 
         # 1. yaw siempre 0 del lidar?
-        # 2. poner la velocidad del radar bien en las merged_bboxes -> Pasarlo a globales
-        # 3. Intentar refinar hiperparámetros
-        # 4. Corregir coche girado inicialmente (casi siempre), es el segundo que aparece en campus_demo_final_v2.bag
-
+        # 2. Corregir coche girado inicialmente (casi siempre), es el segundo que aparece en campus_demo_final_v2.bag
+        # 3. Almacenar en .csv el siguiente formato
+        # 4. Integrar la velocidad del radar en el filtro bayesiano (descomponiendo), no solo propagando
+        # 5. Hacer BIEN la compensación de velocidades
+        # Groundtruth: Frame_idIDxyvel (xy en globales)
+        # Trackers:    Frame_idIDxyvel
         #################################################################
         ### TIME ANALYSIS ###############################################
         #################################################################
@@ -360,7 +421,9 @@ class LiRa():
 
 
 def main() -> None:
-    lira_mot_node = LiRa()
+    # Node initialization
+    rospy.init_node("lira_mot_node")
+    lira_mot_node = LiRaMOT()
     rospy.spin()
 
 if __name__ == "__main__":

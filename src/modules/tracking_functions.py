@@ -33,7 +33,6 @@ from sklearn.preprocessing import PolynomialFeatures
 def linear_assignment(cost_matrix):
   try:
     import lap
-    print("Cost matrix: ", cost_matrix)
     _, x, y = lap.lapjv(cost_matrix, extend_cost=True)
     matched_indices = np.array([[y[i], i] for i in x if i >= 0])
     return matched_indices
@@ -147,8 +146,7 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.001):
 
   Returns 3 lists of matches, unmatched_detections and unmatched_trackers
   """
-  print("Detections: ", detections)
-  print("Trackers: ", trackers)
+
   if(len(trackers)==0):
     return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,6),dtype=int)
   iou_matrix = np.zeros((len(detections),len(trackers)),dtype=np.float32)
@@ -158,10 +156,7 @@ def associate_detections_to_trackers(detections,trackers,iou_threshold = 0.001):
   for d,det in enumerate(detections):
     for t,trk in enumerate(trackers):
       iou_matrix[d,t] = geometric_functions.iou(det,trk)
-      print("iou: ", iou_matrix[d,t])
-  # print("iou matrix: ", iou_matrix)
   matched_indices = linear_assignment(-iou_matrix) # Hungarian Algorithm
-  # print("Matched indices: ", matched_indices)
 
   # Unmatched detections
   
